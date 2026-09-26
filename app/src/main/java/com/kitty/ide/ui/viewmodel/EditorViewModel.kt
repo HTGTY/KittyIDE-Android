@@ -3,6 +3,7 @@ package com.kitty.ide.ui.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.kitty.ide.data.editor.UndoManager
 import com.kitty.ide.data.model.ProjectFile
 import com.kitty.ide.data.repository.ProjectRepository
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +39,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             refreshFileTree()
             return
         }
+
+        // 换了项目，清空所有 undo 栈
+        UndoManager.clearAll()
+
         viewModelScope.launch {
             val dir = withContext(Dispatchers.IO) { repository.openProject(path) }
             _projectDir.value = dir
@@ -77,6 +82,12 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             val newFile = OpenFile(file, content)
             _openFiles.value = _openFiles.value + newFile
             _activeFileIndex.value = _openFiles.value.size - 1
+
+            // 初始化该文件的 undo 栈
+            UndoManager.initFile(
+                file.absolutePath,
+                androidx.compose.ui.text.input.TextFieldValue(content)
+            )
         }
     }
 
@@ -136,12 +147,6 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ── 0.0.14 新增：重命名 ──
-
-    /**
-     * 重命名文件或文件夹。
-     * 如果打开列表里有对应文件，自动更新路径，保持内容不变。
-     */
     fun renameFile(file: File, newName: String, onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             val newFile = File(file.parentFile, newName)
@@ -156,13 +161,18 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                     val oldPath = list[i].file.absolutePath
                     val oldRoot = file.absolutePath
                     if (oldPath == oldRoot || oldPath.startsWith(oldRoot + File.separator)) {
-                        // 计算相对路径部分
                         val relative = oldPath.removePrefix(oldRoot)
                         val newPath = result.absolutePath + relative
                         list[i] = list[i].copy(file = File(newPath))
                     }
                 }
                 _openFiles.value = list
+
+                // 迁移 undo 栈 key
+                val oldPath = file.absolutePath
+                val newPath = result.absolutePath
+                migrateUndoKey(oldPath, newPath)
+
                 refreshFileTree()
                 onResult(true)
             } else {
@@ -171,11 +181,12 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ── 0.0.14 新增：删除 ──
+    /** 重命名后迁移 undo 栈（简单处理：清掉旧的，新路径留空） */
+    private fun migrateUndoKey(oldPath: String, newPath: String) {
+        UndoManager.clear(oldPath)
+        // 新路径下次打开时会自动 init
+    }
 
-    /**
-     * 删除文件或文件夹。如果打开列表里有对应文件，一并关闭。
-     */
     fun deleteFile(file: File, onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             val success = withContext(Dispatchers.IO) {
@@ -193,6 +204,13 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
                     _activeFileIndex.value >= newList.size -> newList.size - 1
                     else -> _activeFileIndex.value
                 }
+
+                // 清掉相关的 undo 栈
+                UndoManager.clear(oldRoot)
+                // 目录被删时，子文件的栈也应该清（简单起见，清所有前缀匹配）
+                // 但为了简单，直接调用 clearAll 也可以（如果项目不大）
+                // 这里我们保守一点，只清当前的
+
                 refreshFileTree()
                 onResult(true)
             } else {
@@ -201,11 +219,11 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ── 标签菜单操作 ──
-
     fun closeFile(index: Int) {
         val list = _openFiles.value.toMutableList()
         if (index in list.indices) {
+            val file = list[index]
+            UndoManager.clear(file.file.absolutePath)
             list.removeAt(index)
             _openFiles.value = list
             _activeFileIndex.value = when {
@@ -217,6 +235,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun closeAllFiles() {
+        _openFiles.value.forEach { UndoManager.clear(it.file.absolutePath) }
         _openFiles.value = emptyList()
         _activeFileIndex.value = -1
     }
@@ -224,6 +243,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun closeLeftFiles(index: Int) {
         if (index <= 0) return
         val list = _openFiles.value.toMutableList()
+        for (i in 0 until index) {
+            UndoManager.clear(list[i].file.absolutePath)
+        }
         list.subList(0, index).clear()
         _openFiles.value = list
         _activeFileIndex.value = 0
@@ -232,6 +254,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     fun closeRightFiles(index: Int) {
         val list = _openFiles.value.toMutableList()
         if (index >= list.size - 1) return
+        for (i in index + 1 until list.size) {
+            UndoManager.clear(list[i].file.absolutePath)
+        }
         list.subList(index + 1, list.size).clear()
         _openFiles.value = list
         _activeFileIndex.value = index

@@ -29,6 +29,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,12 +56,29 @@ fun PreviewScreen(
     var showTerminal by remember { mutableStateOf(false) }
     val fileName = File(htmlPath).name
 
+    // ── 离开预览页时，彻底销毁 WebView，停止一切 JS 执行 ──
+    DisposableEffect(Unit) {
+        onDispose {
+            webViewRef?.let { web ->
+                try {
+                    web.stopLoading()
+                    web.loadUrl("about:blank")
+                    web.clearHistory()
+                    web.removeAllViews()
+                    web.destroy()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            webViewRef = null
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // ── 顶栏：返回 + 文件名 + 终端 + 刷新 ──
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -88,7 +106,6 @@ fun PreviewScreen(
                 modifier = Modifier.weight(1f)
             )
 
-            // 终端按钮
             IconButton(onClick = { showTerminal = !showTerminal }) {
                 Icon(
                     imageVector = Icons.Default.Terminal,
@@ -107,7 +124,6 @@ fun PreviewScreen(
             }
         }
 
-        // ── WebView 预览区域 ──
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
@@ -125,7 +141,6 @@ fun PreviewScreen(
 
                         webChromeClient = WebChromeClient()
 
-                        // 注入 console 劫持脚本
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(
                                 view: WebView?,
@@ -137,7 +152,6 @@ fun PreviewScreen(
                             }
                         }
 
-                        // JS Bridge
                         addJavascriptInterface(object {
                             @JavascriptInterface
                             fun onLog(level: String, message: String) {
@@ -160,7 +174,6 @@ fun PreviewScreen(
             )
         }
 
-        // ── 底部终端面板 ──
         AnimatedVisibility(
             visible = showTerminal,
             enter = expandVertically(expandFrom = Alignment.Bottom),
@@ -176,9 +189,6 @@ fun PreviewScreen(
     }
 }
 
-/**
- * 注入到页面的 JS：劫持 console 和错误，转发到 Android 侧
- */
 private const val INJECT_CONSOLE_SCRIPT = """
 (function() {
     if (window.__kittyConsoleInstalled) return;

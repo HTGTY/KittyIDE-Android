@@ -35,6 +35,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Terminal
@@ -59,6 +61,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -66,10 +73,13 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.changedToDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -77,6 +87,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kitty.ide.data.editor.UndoManager
 import com.kitty.ide.data.model.FileType
 import com.kitty.ide.data.model.ProjectFile
 import com.kitty.ide.data.terminal.TerminalManager
@@ -94,9 +105,6 @@ enum class NewItemType(val title: String, val defaultExt: String?, val hint: Str
     JS("新建 JS 文件", ".js", "输入文件名（自动补 .js）")
 }
 
-/**
- * 单链目录自动展开
- */
 fun autoExpandChain(
     dir: File,
     expandedMap: MutableMap<String, Boolean>,
@@ -139,30 +147,19 @@ fun EditorScreen(
     )
 
     var showTerminal by remember { mutableStateOf(false) }
-
     var showTabMenu by remember { mutableStateOf(false) }
     var tabMenuIndex by remember { mutableStateOf(-1) }
-
-    // 空白长按新建菜单（项目根目录）
     var showFileTreeMenu by remember { mutableStateOf(false) }
-
-    // 新建项对话框
     var showNewItemDialog by remember { mutableStateOf(false) }
     var newItemType by remember { mutableStateOf(NewItemType.FILE) }
     var newItemName by remember { mutableStateOf("") }
     var newItemNameError by remember { mutableStateOf<String?>(null) }
     var newItemParentDir by remember { mutableStateOf<File?>(null) }
-
-    // 小菜单：当前展开菜单的项路径（null 表示无）
     var expandedMenuPath by remember { mutableStateOf<String?>(null) }
-
-    // 重命名对话框
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<ProjectFile?>(null) }
     var renameValue by remember { mutableStateOf("") }
     var renameError by remember { mutableStateOf<String?>(null) }
-
-    // 删除确认
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<ProjectFile?>(null) }
 
@@ -170,11 +167,29 @@ fun EditorScreen(
     var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
     val expandedMap = remember { mutableStateMapOf<String, Boolean>() }
 
+    var canUndoState by remember { mutableStateOf(false) }
+    var canRedoState by remember { mutableStateOf(false) }
+
+    val activePath: String? = if (activeIndex in openFiles.indices) {
+        openFiles[activeIndex].file.absolutePath
+    } else null
+
     LaunchedEffect(activeIndex) {
         if (activeIndex in openFiles.indices) {
-            textFieldValue = TextFieldValue(openFiles[activeIndex].content)
+            val file = openFiles[activeIndex].file
+            // 打开文件时，光标放到最开头
+            val value = TextFieldValue(
+                text = openFiles[activeIndex].content,
+                selection = TextRange(0)
+            )
+            textFieldValue = value
+            UndoManager.initFile(file.absolutePath, value)
+            canUndoState = UndoManager.canUndo(file.absolutePath)
+            canRedoState = UndoManager.canRedo(file.absolutePath)
         } else {
             textFieldValue = TextFieldValue("")
+            canUndoState = false
+            canRedoState = false
         }
     }
 
@@ -182,7 +197,6 @@ fun EditorScreen(
         viewModel.loadProject(projectPath)
     }
 
-    // ── 菜单动作处理 ──
     fun handleNewItem(parent: File, type: NewItemType) {
         newItemType = type
         newItemName = ""
@@ -206,6 +220,28 @@ fun EditorScreen(
     fun handleDelete(target: ProjectFile) {
         deleteTarget = target
         showDeleteConfirm = true
+    }
+
+    fun handleUndo() {
+        val path = activePath ?: return
+        val result = UndoManager.undo(path, textFieldValue)
+        if (result != null) {
+            textFieldValue = result
+            viewModel.updateActiveContent(result.text)
+            canUndoState = UndoManager.canUndo(path)
+            canRedoState = UndoManager.canRedo(path)
+        }
+    }
+
+    fun handleRedo() {
+        val path = activePath ?: return
+        val result = UndoManager.redo(path)
+        if (result != null) {
+            textFieldValue = result
+            viewModel.updateActiveContent(result.text)
+            canUndoState = UndoManager.canUndo(path)
+            canRedoState = UndoManager.canRedo(path)
+        }
     }
 
     Column(
@@ -336,7 +372,7 @@ fun EditorScreen(
             }
         }
 
-        // ── 主体区域：文件树 + 编辑区 + 终端 ──
+        // ── 主体区域 ──
         Row(modifier = Modifier.weight(1f)) {
             if (drawerWidth > 0.dp) {
                 Column(
@@ -410,7 +446,13 @@ fun EditorScreen(
                     onValueChange = { newValue ->
                         textFieldValue = newValue
                         viewModel.updateActiveContent(newValue.text)
+                        activePath?.let { path ->
+                            UndoManager.record(path, newValue)
+                            canUndoState = UndoManager.canUndo(path)
+                            canRedoState = UndoManager.canRedo(path)
+                        }
                     },
+                    focusRequestKey = activeIndex,
                     modifier = Modifier.weight(1f).fillMaxHeight()
                 )
             } else {
@@ -450,10 +492,19 @@ fun EditorScreen(
                 .fillMaxWidth()
                 .imePadding()
                 .navigationBarsPadding(),
+            canUndo = canUndoState,
+            canRedo = canRedoState,
+            onUndo = { handleUndo() },
+            onRedo = { handleRedo() },
             onSymbolClick = { symbol ->
                 val newValue = insertSymbol(textFieldValue, symbol)
                 textFieldValue = newValue
                 viewModel.updateActiveContent(newValue.text)
+                activePath?.let { path ->
+                    UndoManager.record(path, newValue)
+                    canUndoState = UndoManager.canUndo(path)
+                    canRedoState = UndoManager.canRedo(path)
+                }
             },
             onMoreClick = {
                 Toast.makeText(context, "符号栏设置待开发", Toast.LENGTH_SHORT).show()
@@ -465,7 +516,6 @@ fun EditorScreen(
     // 对话框们
     // ═════════════════════════════════════════
 
-    // 空白长按 → 在项目根目录新建
     if (showFileTreeMenu) {
         AlertDialog(
             onDismissRequest = { showFileTreeMenu = false },
@@ -490,7 +540,6 @@ fun EditorScreen(
         )
     }
 
-    // 新建项对话框
     if (showNewItemDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -579,7 +628,6 @@ fun EditorScreen(
         )
     }
 
-    // 重命名对话框
     if (showRenameDialog && renameTarget != null) {
         val target = renameTarget!!
         AlertDialog(
@@ -644,7 +692,6 @@ fun EditorScreen(
         )
     }
 
-    // 删除确认
     if (showDeleteConfirm && deleteTarget != null) {
         val target = deleteTarget!!
         AlertDialog(
@@ -682,9 +729,6 @@ fun EditorScreen(
     }
 }
 
-/**
- * 新建菜单项（文件/文件夹/HTML/CSS/JS）
- */
 @Composable
 fun NewMenuOptions(onSelect: (NewItemType) -> Unit) {
     MenuOption("📄 新建文件") { onSelect(NewItemType.FILE) }
@@ -694,10 +738,6 @@ fun NewMenuOptions(onSelect: (NewItemType) -> Unit) {
     MenuOption("⚙️ 新建 JS 文件") { onSelect(NewItemType.JS) }
 }
 
-/**
- * 文件树递归渲染项
- * 长按弹出小菜单（DropdownMenu），锚定在对应项的位置
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FileTreeItem(
@@ -761,15 +801,11 @@ fun FileTreeItem(
                 )
             }
 
-            // ── 小菜单：锚定在当前项 ──
-            // 当前共 9 项（目录）≤ 10，平铺即可
-            // 若将来菜单项超过 10 个，考虑用二级菜单收纳"新建"子项
             DropdownMenu(
                 expanded = menuExpanded,
                 onDismissRequest = { onMenuToggle(null) }
             ) {
                 if (file.isDirectory) {
-                    // ── 目录：9 项，平铺 ──
                     DropdownMenuItem(
                         text = { Text("📄 新建文件") },
                         onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.FILE) }
@@ -803,7 +839,6 @@ fun FileTreeItem(
                         onClick = { onMenuToggle(null); onDelete(file) }
                     )
                 } else {
-                    // ── 文件：3 项 ──
                     DropdownMenuItem(
                         text = { Text("✏️ 重命名") },
                         onClick = { onMenuToggle(null); onRename(file) }
@@ -868,6 +903,10 @@ fun MenuOption(text: String, onClick: () -> Unit) {
 @Composable
 fun SymbolToolbar(
     modifier: Modifier = Modifier,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
     onSymbolClick: (String) -> Unit,
     onMoreClick: () -> Unit
 ) {
@@ -878,6 +917,9 @@ fun SymbolToolbar(
         "@", "^", "~"
     )
 
+    val disabledColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+    val enabledColor = MaterialTheme.colorScheme.onSurfaceVariant
+
     LazyRow(
         modifier = modifier
             .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -885,6 +927,47 @@ fun SymbolToolbar(
         contentPadding = PaddingValues(horizontal = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
+        item {
+            Box(
+                modifier = Modifier
+                    .clickable(enabled = canUndo) { onUndo() }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Undo,
+                    contentDescription = "撤销",
+                    tint = if (canUndo) enabledColor else disabledColor,
+                    modifier = Modifier.width(20.dp).height(20.dp)
+                )
+            }
+        }
+
+        item {
+            Box(
+                modifier = Modifier
+                    .clickable(enabled = canRedo) { onRedo() }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.Redo,
+                    contentDescription = "重做",
+                    tint = if (canRedo) enabledColor else disabledColor,
+                    modifier = Modifier.width(20.dp).height(20.dp)
+                )
+            }
+        }
+
+        item {
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(24.dp)
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            )
+        }
+
         items(symbols) { symbol ->
             Box(
                 modifier = Modifier
@@ -973,10 +1056,20 @@ fun TextMenuButton(text: String, onClick: () -> Unit) {
     )
 }
 
+/**
+ * 代码编辑区：
+ * - 行号列（左侧）
+ * - 缩进引导线（每行每层级一根竖线）
+ * - 光标行高亮
+ * - 打开文件时自动聚焦、光标置于开头
+ * - 点击文字区域：光标跳到点击位置（BasicTextField 默认行为）
+ * - 点击文字外空白：只聚焦，光标不跳
+ */
 @Composable
 fun CodeEditorWithLineNumbers(
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,
+    focusRequestKey: Any? = null,
     modifier: Modifier = Modifier
 ) {
     val verticalScrollState = rememberScrollState()
@@ -984,6 +1077,23 @@ fun CodeEditorWithLineNumbers(
     val lineCount = value.text.lines().size.coerceAtLeast(1)
     var fontSize by remember { mutableFloatStateOf(15f) }
     val lineHeight = fontSize * 1.5f
+
+    // 缓存 TextLayoutResult 用于绘制
+    var textLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val focusRequester = remember { FocusRequester() }
+
+    // focusRequestKey 变化时自动聚焦（打开文件 / 切换标签）
+    LaunchedEffect(focusRequestKey) {
+        try {
+            focusRequester.requestFocus()
+        } catch (e: Exception) {
+            // 忽略：还没挂载完成时会抛异常
+        }
+    }
+
+    // 光标行高亮色 & 缩进引导线色
+    val cursorLineColor = Color(0x14FFFFFF)
+    val guideColor = Color(0x2AFFFFFF)
 
     Box(
         modifier = modifier
@@ -996,6 +1106,7 @@ fun CodeEditorWithLineNumbers(
             }
     ) {
         Row(modifier = Modifier.fillMaxSize()) {
+            // ── 行号 ──
             Column(
                 modifier = Modifier
                     .width(48.dp)
@@ -1016,6 +1127,7 @@ fun CodeEditorWithLineNumbers(
                 }
             }
 
+            // ── 代码区 ──
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -1029,6 +1141,7 @@ fun CodeEditorWithLineNumbers(
                     onValueChange = onValueChange,
                     modifier = Modifier
                         .fillMaxSize()
+                        .focusRequester(focusRequester)
                         .onPreviewKeyEvent { event ->
                             if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
                                 val newValue = handleEnter(value)
@@ -1038,7 +1151,89 @@ fun CodeEditorWithLineNumbers(
                                 }
                             }
                             false
+                        }
+                        .drawBehind {
+                            val layout = textLayout ?: return@drawBehind
+
+                            // ① 光标行高亮
+                            val cursorOffset = value.selection.start.coerceIn(0, value.text.length)
+                            val cursorLine = layout.getLineForOffset(cursorOffset)
+                            val top = layout.getLineTop(cursorLine)
+                            val bottom = layout.getLineBottom(cursorLine)
+                            drawRect(
+                                color = cursorLineColor,
+                                topLeft = Offset(0f, top),
+                                size = Size(size.width, bottom - top)
+                            )
+
+                            // ② 缩进引导线
+                            val text = value.text
+                            for (line in 0 until layout.lineCount) {
+                                val lineStart = layout.getLineStart(line)
+                                val lineEnd = layout.getLineEnd(line)
+
+                                // 计算这一行的缩进空格数
+                                var spaces = 0
+                                var i = lineStart
+                                while (i < lineEnd && i < text.length) {
+                                    val ch = text[i]
+                                    if (ch == ' ') {
+                                        spaces++
+                                        i++
+                                    } else if (ch == '\t') {
+                                        spaces += 4
+                                        i++
+                                    } else {
+                                        break
+                                    }
+                                }
+                                val indentLevel = spaces / 4
+                                if (indentLevel == 0) continue
+
+                                val lineTop = layout.getLineTop(line)
+                                val lineBottom = layout.getLineBottom(line)
+
+                                for (level in 1..indentLevel) {
+                                    val charOffset = lineStart + level * 4
+                                    if (charOffset > text.length) continue
+                                    val x = layout.getHorizontalPosition(charOffset, true)
+                                    drawLine(
+                                        color = guideColor,
+                                        start = Offset(x, lineTop),
+                                        end = Offset(x, lineBottom),
+                                        strokeWidth = 2f
+                                    )
+                                }
+                            }
+                        }
+                        .pointerInput(textLayout) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    if (event.type == PointerEventType.Press) {
+                                        val change = event.changes.firstOrNull() ?: continue
+                                        if (!change.changedToDown()) continue
+                                        val pos = change.position
+                                        val layout = textLayout
+                                        if (layout != null) {
+                                            val line = layout.getLineForVerticalPosition(pos.y)
+                                            val lineLeft = layout.getLineLeft(line)
+                                            val lineRight = layout.getLineRight(line)
+                                            val lineTop = layout.getLineTop(line)
+                                            val lineBottom = layout.getLineBottom(line)
+                                            val inTextBounds = pos.x in lineLeft..lineRight &&
+                                                               pos.y in lineTop..lineBottom
+                                            if (!inTextBounds) {
+                                                // 点击文字外空白：只聚焦，光标不跳
+                                                focusRequester.requestFocus()
+                                                change.consume()
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         },
+                    onTextLayout = { textLayout = it },
                     textStyle = TextStyle(
                         color = Color(0xFFD4D4D4),
                         fontFamily = FontFamily.Monospace,
