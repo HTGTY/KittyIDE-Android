@@ -114,6 +114,7 @@ fun EditorScreen(
     projectPath: String,
     onBack: () -> Unit,
     onRun: (String) -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: EditorViewModel = viewModel()
 ) {
@@ -198,7 +199,7 @@ fun EditorScreen(
                 }
                 TextMenuButton("文件") { }
                 TextMenuButton("视图") { }
-                TextMenuButton("设置") { }
+                TextMenuButton("设置") { onOpenSettings() }
             }
 
             // ── 运行按钮 ──

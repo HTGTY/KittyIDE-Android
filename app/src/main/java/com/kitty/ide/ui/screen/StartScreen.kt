@@ -10,6 +10,9 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,14 +25,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -40,10 +48,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -51,15 +61,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kitty.ide.AppInfo
 import com.kitty.ide.R
 import com.kitty.ide.data.model.ProjectMeta
 import com.kitty.ide.data.repository.ProjectRepository
 import com.kitty.ide.ui.component.KittyActionButton
 import com.kitty.ide.ui.viewmodel.ProjectViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.random.Random
 
 @Composable
 fun StartScreen(
     onOpenProject: (String) -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ProjectViewModel = viewModel()
 ) {
@@ -68,6 +83,11 @@ fun StartScreen(
     val allProjects by viewModel.allProjects.collectAsState()
     var showNewProjectDialog by remember { mutableStateOf(false) }
     var showPermissionDialog by remember { mutableStateOf(false) }
+
+    // ── 猫咪彩蛋状态 ──
+    var kittyEmoji by remember { mutableStateOf("🐱") }
+    val kittyRotation = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
 
     fun hasStoragePermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -139,128 +159,174 @@ fun StartScreen(
     }
 
     // 合并排序：最近打开的排在前面
-    // 用 recentProjects 的 lastOpened 匹配，匹配不到则用文件夹 lastModified 兜底
     val recentMap = recentProjects.associateBy { it.projectPath }
     val sortedProjects = allProjects.sortedByDescending { info ->
         recentMap[info.dir.absolutePath]?.lastOpened ?: info.dir.lastModified()
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 32.dp)
-    ) {
-        Spacer(Modifier.height(80.dp))
-
-        Box(
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
             modifier = Modifier
-                .size(96.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .align(Alignment.CenterHorizontally),
-            contentAlignment = Alignment.Center
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 32.dp)
         ) {
-            Text(text = "🐱", fontSize = 48.sp)
-        }
+            Spacer(Modifier.height(80.dp))
 
-        Spacer(Modifier.height(24.dp))
+            // ── 猫咪头像（点击旋转彩蛋） ──
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable {
+                        scope.launch {
+                            // 本次旋转角度：50°~380°
+                            val delta = Random.nextInt(50, 381).toFloat()
+                            // 60% 几率换表情
+                            val willChangeEmoji = Random.nextFloat() < 0.6f
 
-        Text(
-            text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
+                            if (willChangeEmoji) {
+                                launch {
+                                    delay(150) // 转起来之后再换脸
+                                    kittyEmoji = listOf("🙀", "😾", "😽").random()
+                                }
+                            }
 
-        Spacer(Modifier.height(8.dp))
+                            kittyRotation.animateTo(
+                                targetValue = kittyRotation.value + delta,
+                                animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing)
+                            )
 
-        Text(
-            text = stringResource(R.string.start_slogan),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
-
-        Spacer(Modifier.height(48.dp))
-
-        KittyActionButton(
-            text = stringResource(R.string.start_new_project),
-            primary = true,
-            onClick = { showNewProjectDialog = true },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        KittyActionButton(
-            text = stringResource(R.string.start_open_project),
-            primary = false,
-            onClick = { openProjectLauncher.launch(null) },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(Modifier.height(48.dp))
-
-        // ── 所有项目（平铺，最近打开的排最前面） ──
-        Text(
-            text = "所有项目",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        if (sortedProjects.isEmpty()) {
-            Text(
-                text = "暂无项目，去创建一个吧～",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp)
-            )
-        } else {
-            sortedProjects.forEach { info ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            viewModel.openProjectByPath(info.dir.absolutePath) { path ->
-                                if (path != null) onOpenProject(path)
+                            // 转完恢复
+                            if (willChangeEmoji) {
+                                delay(250)
+                                kittyEmoji = "🐱"
                             }
                         }
-                        .padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(text = "📦", fontSize = 20.sp)
-                    Spacer(Modifier.size(12.dp))
-                    Column {
-                        Text(
-                            text = info.meta.projectName,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "v${info.meta.projectVersion} · ${info.meta.mainLanguage}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                    .align(Alignment.CenterHorizontally),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = kittyEmoji,
+                    fontSize = 48.sp,
+                    modifier = Modifier.graphicsLayer { rotationZ = kittyRotation.value }
+                )
             }
+
+            Spacer(Modifier.height(24.dp))
+
+            Text(
+                text = stringResource(R.string.app_name),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = stringResource(R.string.start_slogan),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+
+            Spacer(Modifier.height(48.dp))
+
+            KittyActionButton(
+                text = stringResource(R.string.start_new_project),
+                primary = true,
+                onClick = { showNewProjectDialog = true },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            KittyActionButton(
+                text = stringResource(R.string.start_open_project),
+                primary = false,
+                onClick = { openProjectLauncher.launch(null) },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(Modifier.height(48.dp))
+
+            Text(
+                text = "所有项目",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            if (sortedProjects.isEmpty()) {
+                Text(
+                    text = "暂无项目，去创建一个吧～",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp)
+                )
+            } else {
+                sortedProjects.forEach { info ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.openProjectByPath(info.dir.absolutePath) { path ->
+                                    if (path != null) onOpenProject(path)
+                                }
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "📦", fontSize = 20.sp)
+                        Spacer(Modifier.size(12.dp))
+                        Column {
+                            Text(
+                                text = info.meta.projectName,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "v${info.meta.projectVersion} · ${info.meta.mainLanguage}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                }
+            }
+
+            Spacer(Modifier.height(48.dp))
+
+            Text(
+                text = "v${AppInfo.VERSION}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+
+            Spacer(Modifier.height(32.dp))
         }
 
-        Spacer(Modifier.height(48.dp))
-
-        Text(
-            text = stringResource(R.string.start_version),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        )
-
-        Spacer(Modifier.height(32.dp))
+        // ── 左上角设置图标 ──
+        IconButton(
+            onClick = onOpenSettings,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(start = 8.dp, top = 8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Settings,
+                contentDescription = "设置",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 
     if (showNewProjectDialog) {
@@ -270,7 +336,7 @@ fun StartScreen(
                 val meta = ProjectMeta(
                     projectName = name,
                     projectVersion = version,
-                    ideVersion = "0.0.8",
+                    ideVersion = AppInfo.VERSION,
                     description = desc,
                     mainLanguage = lang,
                     createdAt = ProjectRepository.nowIso()
