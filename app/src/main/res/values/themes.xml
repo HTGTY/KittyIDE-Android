@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.KittyIDE" parent="android:Theme.DeviceDefault.DayNight">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+</resources>

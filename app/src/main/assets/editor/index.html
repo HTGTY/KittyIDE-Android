@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kitty Editor</title>
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; background-color: #1e1e1e; }
+        #editor { height: 100%; }
+        ::-webkit-scrollbar { width: 0; height: 0; }
+    </style>
+    <!-- CodeMirror 6 的核心样式，本地引入 -->
+    <link rel="stylesheet" href="cm6.bundle.css"> <!-- 注意：bundle 可能包含 CSS，需要确认是否有对应 CSS 文件 -->
+</head>
+<body>
+    <div id="editor"></div>
+
+    <!-- 引入本地的 CodeMirror 6 打包文件 -->
+    <script src="cm6.bundle.js"></script>
+
+    <script>
+        // 1. 定义 JS 向 Android 通信的桥接
+        const androidBridge = window.AndroidBridge || { onContentChanged: () => {} };
+
+        // 2. 内容变化监听器
+        const updateListener = EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+                if (window.AndroidBridge) {
+                    window.AndroidBridge.onContentChanged(update.state.doc.toString());
+                }
+            }
+        });
+
+        // 3. 初始化编辑器 (API 名称可能因 bundle 而异，请参考对应文档)
+        // 假设 bundle 暴露了全局变量 `cm6`，并提供了 `newEditor` 等方法
+        const view = cm6.newEditor(
+            document.getElementById('editor'), 
+            '', 
+            { dark: true, lineWrapping: true }
+        );
+
+        // 4. 暴露给 Android 调用的方法
+        window.setEditorContent = function(content) {
+            view.dispatch({
+                changes: { from: 0, to: view.state.doc.length, insert: content }
+            });
+        };
+
+        window.setEditorTheme = function(isDark) {
+            document.body.style.backgroundColor = isDark ? '#1e1e1e' : '#ffffff';
+        };
+    </script>
+</body>
+</html>
