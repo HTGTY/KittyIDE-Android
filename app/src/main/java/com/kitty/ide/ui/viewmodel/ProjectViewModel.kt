@@ -12,6 +12,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+
+/** 项目信息（用于“所有项目”列表） */
+data class ProjectInfo(
+    val meta: ProjectMeta,
+    val dir: File
+)
 
 class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -20,8 +27,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
     private val _recentProjects = MutableStateFlow<List<RecentProjectRecord>>(emptyList())
     val recentProjects: StateFlow<List<RecentProjectRecord>> = _recentProjects
 
+    private val _allProjects = MutableStateFlow<List<ProjectInfo>>(emptyList())
+    val allProjects: StateFlow<List<ProjectInfo>> = _allProjects
+
     init {
         refreshRecentProjects()
+        refreshAllProjects()
     }
 
     fun refreshRecentProjects() {
@@ -31,7 +42,15 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 通过本地路径打开项目 */
+    fun refreshAllProjects() {
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) {
+                repository.scanAllProjects().map { ProjectInfo(it.first, it.second) }
+            }
+            _allProjects.value = list
+        }
+    }
+
     fun openProjectByPath(path: String, onResult: (String?) -> Unit) {
         viewModelScope.launch {
             val dir = withContext(Dispatchers.IO) { repository.openProject(path) }
@@ -44,12 +63,12 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 新建项目 */
     fun createProject(meta: ProjectMeta, createSample: Boolean, onResult: (String?) -> Unit) {
         viewModelScope.launch {
             val dir = withContext(Dispatchers.IO) { repository.createProject(meta, createSample) }
             if (dir != null) {
                 refreshRecentProjects()
+                refreshAllProjects()
                 onResult(dir.absolutePath)
             } else {
                 onResult(null)
@@ -57,7 +76,7 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** SAF 兜底：0.0.3 暂时不支持外部 SAF 目录直接编辑，返回 null */
+    /** SAF 兜底，0.0.5 暂不支持 */
     fun openProjectFromSaf(uri: Uri, onResult: (String?) -> Unit) {
         onResult(null)
     }

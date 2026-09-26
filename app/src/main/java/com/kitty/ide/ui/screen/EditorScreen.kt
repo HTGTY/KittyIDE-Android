@@ -1,6 +1,9 @@
 package com.kitty.ide.ui.screen
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -23,7 +26,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -33,17 +35,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -66,7 +73,40 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kitty.ide.data.model.FileType
+import com.kitty.ide.data.model.ProjectFile
 import com.kitty.ide.ui.viewmodel.EditorViewModel
+import java.io.File
+
+/** 新建项类型 */
+enum class NewItemType(val title: String, val defaultExt: String?, val hint: String) {
+    FILE("新建文件", null, "输入完整文件名，例如 main.py"),
+    FOLDER("新建文件夹", null, "输入文件夹名"),
+    HTML("新建 HTML 文件", ".html", "输入文件名（自动补 .html）"),
+    CSS("新建 CSS 文件", ".css", "输入文件名（自动补 .css）"),
+    JS("新建 JS 文件", ".js", "输入文件名（自动补 .js）")
+}
+
+/**
+ * 单链目录自动展开：
+ * 从 dir 开始，若其下只有一个子项且是目录，就自动展开它，一路递归下去。
+ */
+fun autoExpandChain(
+    dir: File,
+    expandedMap: MutableMap<String, Boolean>,
+    viewModel: EditorViewModel
+) {
+    var current = dir
+    while (true) {
+        val children = viewModel.listChildren(current)
+        if (children.size == 1 && children[0].isDirectory) {
+            val childPath = children[0].file.absolutePath
+            expandedMap[childPath] = true
+            current = children[0].file
+        } else {
+            break
+        }
+    }
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -80,6 +120,7 @@ fun EditorScreen(
     val projectFiles by viewModel.projectFiles.collectAsState()
     val openFiles by viewModel.openFiles.collectAsState()
     val activeIndex by viewModel.activeFileIndex.collectAsState()
+    val projectDir by viewModel.projectDir.collectAsState()
 
     var isDrawerOpen by remember { mutableStateOf(false) }
     val drawerWidth by animateDpAsState(
@@ -90,10 +131,21 @@ fun EditorScreen(
     var showTabMenu by remember { mutableStateOf(false) }
     var tabMenuIndex by remember { mutableStateOf(-1) }
 
-    // 核心状态：编辑器的 TextFieldValue，用于获取光标位置
+    var showFileTreeMenu by remember { mutableStateOf(false) }
+    var showNewItemDialog by remember { mutableStateOf(false) }
+    var newItemType by remember { mutableStateOf(NewItemType.FILE) }
+    var newItemName by remember { mutableStateOf("") }
+
+    // 记录新建项的父目录，null 表示项目根目录
+    var newItemParentDir by remember { mutableStateOf<File?>(null) }
+
+    // 文件树版本号，用于强制刷新子目录缓存
+    var fileTreeVersion by remember { mutableIntStateOf(0) }
+
     var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
 
-    // 当切换标签时，重新加载对应文件的内容
+    val expandedMap = remember { mutableStateMapOf<String, Boolean>() }
+
     LaunchedEffect(activeIndex) {
         if (activeIndex in openFiles.indices) {
             textFieldValue = TextFieldValue(openFiles[activeIndex].content)
@@ -208,39 +260,61 @@ fun EditorScreen(
         // ── 主体区域：文件树 + 编辑区 ──
         Row(modifier = Modifier.weight(1f)) {
             if (drawerWidth > 0.dp) {
-                LazyColumn(
+                Column(
                     modifier = Modifier
                         .width(drawerWidth)
                         .fillMaxHeight()
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .padding(8.dp)
                 ) {
-                    item {
-                        Text(
-                            text = "资源管理器",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    items(projectFiles) { projectFile ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    if (projectFile.isDirectory) {
-                                        Toast.makeText(context, "目录暂不支持展开", Toast.LENGTH_SHORT).show()
-                                    } else if (projectFile.fileType == FileType.TEXT) {
-                                        viewModel.openFile(projectFile.file)
+                    Text(
+                        text = "资源管理器",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .combinedClickable(
+                                onClick = { },
+                                onLongClick = {
+                                    // 长按空白处 → 项目根目录
+                                    newItemParentDir = null
+                                    showFileTreeMenu = true
+                                }
+                            )
+                    ) {
+                        projectFiles.forEach { file ->
+                            FileTreeItem(
+                                file = file,
+                                depth = 0,
+                                expandedMap = expandedMap,
+                                version = fileTreeVersion,
+                                onFileClick = { f ->
+                                    if (f.fileType == FileType.TEXT) {
+                                        viewModel.openFile(f.file)
                                     } else {
                                         Toast.makeText(context, "暂不支持预览此格式", Toast.LENGTH_SHORT).show()
                                     }
-                                }
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = if (projectFile.isDirectory) "📁" else "📄", modifier = Modifier.padding(end = 8.dp))
-                            Text(text = projectFile.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+                                },
+                                onLongClick = { f ->
+                                    // 长按文件夹 → 在该文件夹内新建
+                                    newItemParentDir = f.file
+                                    showFileTreeMenu = true
+                                },
+                                viewModel = viewModel
+                            )
                         }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                        )
                     }
                 }
             }
@@ -265,8 +339,8 @@ fun EditorScreen(
         SymbolToolbar(
             modifier = Modifier
                 .fillMaxWidth()
-                .imePadding() // 👈 核心：跟随键盘上移
-                .navigationBarsPadding(), // 👈 防止被系统底部导航条遮挡
+                .imePadding()
+                .navigationBarsPadding(),
             onSymbolClick = { symbol ->
                 val newValue = insertSymbol(textFieldValue, symbol)
                 textFieldValue = newValue
@@ -277,11 +351,231 @@ fun EditorScreen(
             }
         )
     }
+
+    // ── 文件树新建菜单 ──
+    if (showFileTreeMenu) {
+        val targetLabel = newItemParentDir?.name ?: "项目根目录"
+        AlertDialog(
+            onDismissRequest = { showFileTreeMenu = false },
+            title = { Text("在「$targetLabel」中新建") },
+            text = {
+                Column {
+                    MenuOption("📄 新建文件") {
+                        newItemType = NewItemType.FILE
+                        newItemName = ""
+                        showNewItemDialog = true
+                        showFileTreeMenu = false
+                    }
+                    MenuOption("📁 新建文件夹") {
+                        newItemType = NewItemType.FOLDER
+                        newItemName = ""
+                        showNewItemDialog = true
+                        showFileTreeMenu = false
+                    }
+                    MenuOption("🌐 新建 HTML 文件") {
+                        newItemType = NewItemType.HTML
+                        newItemName = ""
+                        showNewItemDialog = true
+                        showFileTreeMenu = false
+                    }
+                    MenuOption("🎨 新建 CSS 文件") {
+                        newItemType = NewItemType.CSS
+                        newItemName = ""
+                        showNewItemDialog = true
+                        showFileTreeMenu = false
+                    }
+                    MenuOption("⚙️ 新建 JS 文件") {
+                        newItemType = NewItemType.JS
+                        newItemName = ""
+                        showNewItemDialog = true
+                        showFileTreeMenu = false
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showFileTreeMenu = false }) { Text("取消") }
+            }
+        )
+    }
+
+    if (showNewItemDialog) {
+        NewItemDialog(
+            type = newItemType,
+            value = newItemName,
+            onValueChange = { newItemName = it },
+            onDismiss = { showNewItemDialog = false; newItemName = "" },
+            onConfirm = {
+                val name = newItemName.trim()
+                val targetDir = newItemParentDir ?: projectDir
+                if (name.isNotEmpty() && targetDir != null) {
+                    // 创建成功后，自动展开该目录（并链式展开单链子目录）
+                    expandedMap[targetDir.absolutePath] = true
+                    autoExpandChain(targetDir, expandedMap, viewModel)
+
+                    if (newItemType == NewItemType.FOLDER) {
+                        viewModel.createFolder(targetDir, name) { success ->
+                            if (success) {
+                                fileTreeVersion++
+                            } else {
+                                Toast.makeText(context, "创建失败，可能已存在", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } else {
+                        val ext = newItemType.defaultExt
+                        val fileName = if (ext != null && !name.endsWith(ext)) name + ext else name
+                        viewModel.createFile(targetDir, fileName) { success ->
+                            if (success) {
+                                fileTreeVersion++
+                            } else {
+                                Toast.makeText(context, "创建失败，可能已存在", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+                showNewItemDialog = false
+                newItemName = ""
+                newItemParentDir = null
+            }
+        )
+    }
 }
 
 /**
- * 底部符号工具栏
+ * 文件树递归渲染项
+ * 支持：点击目录展开/折叠（带平滑动画 + 单链自动展开）、点击文件打开、长按触发新建菜单
  */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun FileTreeItem(
+    file: ProjectFile,
+    depth: Int,
+    expandedMap: MutableMap<String, Boolean>,
+    version: Int,
+    onFileClick: (ProjectFile) -> Unit,
+    onLongClick: (ProjectFile) -> Unit,
+    viewModel: EditorViewModel
+) {
+    val path = file.file.absolutePath
+    val isExpanded = expandedMap[path] == true
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // 当前项的 Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = {
+                        if (file.isDirectory) {
+                            val willExpand = !isExpanded
+                            expandedMap[path] = willExpand
+                            // 展开时，自动链式展开单链目录
+                            if (willExpand) {
+                                autoExpandChain(file.file, expandedMap, viewModel)
+                            }
+                        } else {
+                            onFileClick(file)
+                        }
+                    },
+                    onLongClick = { onLongClick(file) }
+                )
+                .padding(
+                    start = (depth * 16).dp,
+                    top = 8.dp,
+                    bottom = 8.dp
+                ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (file.isDirectory) (if (isExpanded) "▼" else "▶") else "",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                modifier = Modifier.width(16.dp)
+            )
+            Text(
+                text = if (file.isDirectory) "📁" else "📄",
+                modifier = Modifier.padding(end = 8.dp)
+            )
+            Text(
+                text = file.name,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        // 子项区域，带平滑展开/收起动画
+        if (file.isDirectory) {
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    val children = remember(path, version) {
+                        viewModel.listChildren(file.file)
+                    }
+                    children.forEach { child ->
+                        FileTreeItem(
+                            file = child,
+                            depth = depth + 1,
+                            expandedMap = expandedMap,
+                            version = version,
+                            onFileClick = onFileClick,
+                            onLongClick = onLongClick,
+                            viewModel = viewModel
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MenuOption(text: String, onClick: () -> Unit) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp, horizontal = 4.dp)
+    )
+}
+
+@Composable
+fun NewItemDialog(
+    type: NewItemType,
+    value: String,
+    onValueChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(type.title) },
+        text = {
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                label = { Text("名称") },
+                placeholder = { Text(type.hint) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = value.isNotBlank()
+            ) { Text("创建") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
 @Composable
 fun SymbolToolbar(
     modifier: Modifier = Modifier,
@@ -318,7 +612,6 @@ fun SymbolToolbar(
             }
         }
 
-        // 预留的“...”按钮
         item {
             Box(
                 modifier = Modifier
@@ -336,9 +629,6 @@ fun SymbolToolbar(
     }
 }
 
-/**
- * 在 TextFieldValue 中插入符号，并处理成对符号的光标跳转
- */
 fun insertSymbol(value: TextFieldValue, symbol: String): TextFieldValue {
     val text = value.text
     val start = value.selection.start
@@ -346,7 +636,6 @@ fun insertSymbol(value: TextFieldValue, symbol: String): TextFieldValue {
 
     val pairs = mapOf("{}" to "}", "[]" to "]", "()" to ")", "<>" to ">", "\"\"" to "\"", "''" to "'")
 
-    // 成对符号：插入左符号和右符号，光标停在中间
     if (symbol.length == 2 && pairs.containsKey(symbol)) {
         val left = symbol.substring(0, 1)
         val right = symbol.substring(1)
@@ -354,35 +643,28 @@ fun insertSymbol(value: TextFieldValue, symbol: String): TextFieldValue {
         return TextFieldValue(newText, TextRange(start + 1))
     }
 
-    // Tab 键：插入 4 个空格
     if (symbol == "Tab") {
         val newText = text.substring(0, start) + "    " + text.substring(end)
         return TextFieldValue(newText, TextRange(start + 4))
     }
 
-    // 普通符号：直接插入到光标处
     val newText = text.substring(0, start) + symbol + text.substring(end)
     return TextFieldValue(newText, TextRange(start + symbol.length))
 }
 
-/**
- * 处理回车自动缩进
- */
 fun handleEnter(value: TextFieldValue): TextFieldValue? {
     val text = value.text
     val start = value.selection.start
     val end = value.selection.end
 
-    if (start != end) return null // 有选中文本，不处理，走默认逻辑
+    if (start != end) return null
 
-    // 场景1：光标在 {|} 中间，回车后自动展开并缩进
     if (start > 0 && start < text.length && text[start - 1] == '{' && text[start] == '}') {
         val indent = "    "
         val newText = text.substring(0, start) + "\n" + indent + "\n" + text.substring(start)
         return TextFieldValue(newText, TextRange(start + 1 + indent.length))
     }
 
-    // 场景2：普通换行，自动继承上一行的缩进
     val lineStart = text.lastIndexOf('\n', start - 1) + 1
     val currentLine = text.substring(lineStart, start)
     val indent = currentLine.takeWhile { it == ' ' || it == '\t' }
@@ -425,7 +707,6 @@ fun CodeEditorWithLineNumbers(
             }
     ) {
         Row(modifier = Modifier.fillMaxSize()) {
-            // 行号
             Column(
                 modifier = Modifier
                     .width(48.dp)
@@ -446,7 +727,6 @@ fun CodeEditorWithLineNumbers(
                 }
             }
 
-            // 输入区
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -465,7 +745,7 @@ fun CodeEditorWithLineNumbers(
                                 val newValue = handleEnter(value)
                                 if (newValue != null) {
                                     onValueChange(newValue)
-                                    return@onPreviewKeyEvent true // 消费事件，阻止默认换行
+                                    return@onPreviewKeyEvent true
                                 }
                             }
                             false

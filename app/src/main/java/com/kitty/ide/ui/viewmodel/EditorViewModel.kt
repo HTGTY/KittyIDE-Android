@@ -59,6 +59,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** 列出某个目录下的子文件（供文件树递归展开使用） */
+    fun listChildren(dir: File): List<ProjectFile> = repository.listProjectFiles(dir)
+
     fun openFile(file: File) {
         val currentList = _openFiles.value
         val existingIndex = currentList.indexOfFirst { it.file.absolutePath == file.absolutePath }
@@ -103,6 +106,33 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             return success
         }
         return false
+    }
+
+    // ── 新建文件/文件夹（parentDir 指定在哪个目录下创建） ──
+
+    fun createFile(parentDir: File, fileName: String, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val file = withContext(Dispatchers.IO) { repository.createFile(parentDir, fileName) }
+            if (file != null) {
+                refreshFileTree()
+                openFile(file)
+                onResult(true)
+            } else {
+                onResult(false)
+            }
+        }
+    }
+
+    fun createFolder(parentDir: File, folderName: String, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val folder = withContext(Dispatchers.IO) { repository.createFolder(parentDir, folderName) }
+            if (folder != null) {
+                refreshFileTree()
+                onResult(true)
+            } else {
+                onResult(false)
+            }
+        }
     }
 
     // ── 标签菜单操作 ──

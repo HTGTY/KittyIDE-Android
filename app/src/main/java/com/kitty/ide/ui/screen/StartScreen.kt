@@ -245,7 +245,7 @@ fun StartScreen(
                 val meta = ProjectMeta(
                     projectName = name,
                     projectVersion = version,
-                    ideVersion = "0.0.4",
+                    ideVersion = "0.0.5",
                     description = desc,
                     mainLanguage = lang,
                     createdAt = ProjectRepository.nowIso()

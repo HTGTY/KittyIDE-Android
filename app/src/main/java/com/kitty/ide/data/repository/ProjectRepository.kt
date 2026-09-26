@@ -15,6 +15,60 @@ import java.util.Locale
 
 class ProjectRepository(private val context: Context) {
 
+    // ─────────────────────────────────────────────
+    // 7. 新建文件与文件夹（0.0.5 新增）
+    // ─────────────────────────────────────────────
+    
+    /** 在指定目录下新建文件，返回新建的 File 或 null（重名/失败） */
+    fun createFile(parentDir: File, fileName: String): File? {
+        return try {
+            val file = File(parentDir, fileName)
+            if (file.exists()) return null
+            // 确保父目录存在
+            file.parentFile?.mkdirs()
+            if (file.createNewFile()) file else null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+    
+    /** 在指定目录下新建文件夹，返回新建的 File 或 null */
+    fun createFolder(parentDir: File, folderName: String): File? {
+        return try {
+            val folder = File(parentDir, folderName)
+            if (folder.exists()) return null
+            if (folder.mkdirs()) folder else null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+    
+    /**
+     * 扫描项目父目录，找出所有含 .kitty_project.json 的目录
+     * @return Pair<ProjectMeta, File> 列表
+     */
+    fun scanAllProjects(): List<Pair<ProjectMeta, File>> {
+        val parentDir = getProjectParentDir()
+        val result = mutableListOf<Pair<ProjectMeta, File>>()
+        parentDir.listFiles()?.forEach { dir ->
+            if (dir.isDirectory) {
+                val metaFile = File(dir, ".kitty_project.json")
+                if (metaFile.exists()) {
+                    try {
+                        val meta = ProjectMeta.fromJson(metaFile.readText())
+                        if (meta != null) result.add(meta to dir)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+        }
+        // 按创建时间倒序
+        return result.sortedByDescending { it.first.createdAt }
+    }
+
     /** 获取项目父目录。有全文件权限则返回 /sdcard/Documents/Kitty/project/，否则返回私有目录 */
     fun getProjectParentDir(): File {
         val parentDir = if (Environment.isExternalStorageManager()) {
@@ -94,7 +148,8 @@ class ProjectRepository(private val context: Context) {
                 )
             )
         }
-        return result.sortedWith(compareByDescending<ProjectFile> { it.isDirectory }.thenBy { it.name })
+       // ✅ 现在：文件靠前，目录靠后
+        return result.sortedWith(compareBy<ProjectFile> { it.isDirectory }.thenBy { it.name })
     }
 
     private fun detectFileType(name: String, isDir: Boolean): FileType {
