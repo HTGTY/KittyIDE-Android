@@ -17,7 +17,6 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repository = ProjectRepository(app)
 
-    // 最近项目列表状态
     private val _recentProjects = MutableStateFlow<List<RecentProjectRecord>>(emptyList())
     val recentProjects: StateFlow<List<RecentProjectRecord>> = _recentProjects
 
@@ -32,36 +31,34 @@ class ProjectViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 打开项目：传入选中的父目录 URI，返回项目根目录 URI 字符串 */
-    fun openProject(uri: Uri, onResult: (String?) -> Unit) {
+    /** 通过本地路径打开项目 */
+    fun openProjectByPath(path: String, onResult: (String?) -> Unit) {
         viewModelScope.launch {
-            val dir = withContext(Dispatchers.IO) { repository.openProject(uri) }
+            val dir = withContext(Dispatchers.IO) { repository.openProject(path) }
             if (dir != null) {
                 refreshRecentProjects()
-                onResult(dir.uri.toString())
+                onResult(dir.absolutePath)
             } else {
                 onResult(null)
             }
         }
     }
 
-    /** 新建项目：传入选中的父目录 URI 和元数据，返回新项目根目录 URI 字符串 */
-    fun createProject(
-        parentUri: Uri,
-        meta: ProjectMeta,
-        createSample: Boolean,
-        onResult: (String?) -> Unit
-    ) {
+    /** 新建项目 */
+    fun createProject(meta: ProjectMeta, createSample: Boolean, onResult: (String?) -> Unit) {
         viewModelScope.launch {
-            val dir = withContext(Dispatchers.IO) {
-                repository.createProject(parentUri, meta, createSample)
-            }
+            val dir = withContext(Dispatchers.IO) { repository.createProject(meta, createSample) }
             if (dir != null) {
                 refreshRecentProjects()
-                onResult(dir.uri.toString())
+                onResult(dir.absolutePath)
             } else {
                 onResult(null)
             }
         }
+    }
+
+    /** SAF 兜底：0.0.3 暂时不支持外部 SAF 目录直接编辑，返回 null */
+    fun openProjectFromSaf(uri: Uri, onResult: (String?) -> Unit) {
+        onResult(null)
     }
 }

@@ -11,11 +11,11 @@ import com.kitty.ide.ui.screen.StartScreen
 
 object KittyRoute {
     const val START = "start"
-    const val EDITOR = "editor/{projectUri}"
+    const val EDITOR = "editor/{projectPath}"
 
-    fun editor(projectUri: String): String {
-        // 对 URI 进行编码，避免斜杠等特殊字符导致导航解析失败
-        return "editor/${Uri.encode(projectUri)}"
+    /** 构建编辑器页面的导航路由，对路径进行 Uri 编码，避免斜杠等特殊字符导致导航解析失败 */
+    fun editor(projectPath: String): String {
+        return "editor/${Uri.encode(projectPath)}"
     }
 }
 
@@ -29,16 +29,17 @@ fun KittyNavHost(
     ) {
         composable(KittyRoute.START) {
             StartScreen(
-                onOpenProject = { projectUri ->
-                    navController.navigate(KittyRoute.editor(projectUri))
+                onOpenProject = { projectPath ->
+                    navController.navigate(KittyRoute.editor(projectPath))
                 }
             )
         }
+
         composable(KittyRoute.EDITOR) { backStackEntry ->
-            val encodedUri = backStackEntry.arguments?.getString("projectUri") ?: ""
-            val projectUri = Uri.decode(encodedUri)
+            val encodedPath = backStackEntry.arguments?.getString("projectPath") ?: ""
+            val projectPath = Uri.decode(encodedPath)
             EditorScreen(
-                projectUri = projectUri,
+                projectPath = projectPath,
                 onBack = { navController.popBackStack() }
             )
         }
