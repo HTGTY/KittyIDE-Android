@@ -65,6 +65,7 @@ fun StartScreen(
 ) {
     val context = LocalContext.current
     val recentProjects by viewModel.recentProjects.collectAsState()
+    val allProjects by viewModel.allProjects.collectAsState()
     var showNewProjectDialog by remember { mutableStateOf(false) }
     var showPermissionDialog by remember { mutableStateOf(false) }
 
@@ -83,6 +84,7 @@ fun StartScreen(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
         viewModel.refreshRecentProjects()
+        viewModel.refreshAllProjects()
     }
 
     LaunchedEffect(Unit) {
@@ -134,6 +136,13 @@ fun StartScreen(
                 else Toast.makeText(context, "暂不支持此目录", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    // 合并排序：最近打开的排在前面
+    // 用 recentProjects 的 lastOpened 匹配，匹配不到则用文件夹 lastModified 兜底
+    val recentMap = recentProjects.associateBy { it.projectPath }
+    val sortedProjects = allProjects.sortedByDescending { info ->
+        recentMap[info.dir.absolutePath]?.lastOpened ?: info.dir.lastModified()
     }
 
     Column(
@@ -195,32 +204,48 @@ fun StartScreen(
 
         Spacer(Modifier.height(48.dp))
 
-        if (recentProjects.isNotEmpty()) {
+        // ── 所有项目（平铺，最近打开的排最前面） ──
+        Text(
+            text = "所有项目",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        if (sortedProjects.isEmpty()) {
             Text(
-                text = "最近打开",
-                style = MaterialTheme.typography.labelLarge,
+                text = "暂无项目，去创建一个吧～",
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 8.dp)
+                modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp)
             )
-            recentProjects.forEach { record ->
+        } else {
+            sortedProjects.forEach { info ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            viewModel.openProjectByPath(record.projectPath) { path ->
+                            viewModel.openProjectByPath(info.dir.absolutePath) { path ->
                                 if (path != null) onOpenProject(path)
                             }
                         }
                         .padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "📁", fontSize = 20.sp)
+                    Text(text = "📦", fontSize = 20.sp)
                     Spacer(Modifier.size(12.dp))
-                    Text(
-                        text = record.projectName,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Column {
+                        Text(
+                            text = info.meta.projectName,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "v${info.meta.projectVersion} · ${info.meta.mainLanguage}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
             }
@@ -245,7 +270,7 @@ fun StartScreen(
                 val meta = ProjectMeta(
                     projectName = name,
                     projectVersion = version,
-                    ideVersion = "0.0.5",
+                    ideVersion = "0.0.6",
                     description = desc,
                     mainLanguage = lang,
                     createdAt = ProjectRepository.nowIso()
