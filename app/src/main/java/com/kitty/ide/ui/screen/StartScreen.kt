@@ -67,6 +67,7 @@ import com.kitty.ide.data.model.ProjectMeta
 import com.kitty.ide.data.repository.ProjectRepository
 import com.kitty.ide.ui.component.KittyActionButton
 import com.kitty.ide.ui.viewmodel.ProjectViewModel
+import com.kitty.ide.util.NameValidator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
@@ -158,7 +159,6 @@ fun StartScreen(
         }
     }
 
-    // 合并排序：最近打开的排在前面
     val recentMap = recentProjects.associateBy { it.projectPath }
     val sortedProjects = allProjects.sortedByDescending { info ->
         recentMap[info.dir.absolutePath]?.lastOpened ?: info.dir.lastModified()
@@ -174,7 +174,6 @@ fun StartScreen(
         ) {
             Spacer(Modifier.height(80.dp))
 
-            // ── 猫咪头像（点击旋转彩蛋） ──
             Box(
                 modifier = Modifier
                     .size(96.dp)
@@ -182,14 +181,12 @@ fun StartScreen(
                     .background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable {
                         scope.launch {
-                            // 本次旋转角度：50°~380°
                             val delta = Random.nextInt(50, 381).toFloat()
-                            // 60% 几率换表情
                             val willChangeEmoji = Random.nextFloat() < 0.6f
 
                             if (willChangeEmoji) {
                                 launch {
-                                    delay(150) // 转起来之后再换脸
+                                    delay(150)
                                     kittyEmoji = listOf("🙀", "😾", "😽").random()
                                 }
                             }
@@ -199,7 +196,6 @@ fun StartScreen(
                                 animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing)
                             )
 
-                            // 转完恢复
                             if (willChangeEmoji) {
                                 delay(250)
                                 kittyEmoji = "🐱"
@@ -313,7 +309,6 @@ fun StartScreen(
             Spacer(Modifier.height(32.dp))
         }
 
-        // ── 左上角设置图标 ──
         IconButton(
             onClick = onOpenSettings,
             modifier = Modifier
@@ -365,6 +360,7 @@ fun NewProjectDialog(
     var language by remember { mutableStateOf("Web") }
     var languageExpanded by remember { mutableStateOf(false) }
     var createSample by remember { mutableStateOf(false) }
+    var nameError by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -373,11 +369,22 @@ fun NewProjectDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = {
+                        name = it
+                        nameError = null
+                    },
                     label = { Text("项目名 *") },
                     singleLine = true,
+                    isError = nameError != null,
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (nameError != null) {
+                    Text(
+                        text = nameError!!,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
                 OutlinedTextField(
                     value = version,
                     onValueChange = { version = it },
@@ -431,11 +438,13 @@ fun NewProjectDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (name.isNotBlank()) {
-                        onConfirm(name.trim(), version.trim(), desc.trim(), language, createSample)
+                    val error = NameValidator.validate(name)
+                    if (error != null) {
+                        nameError = error
+                        return@TextButton
                     }
-                },
-                enabled = name.isNotBlank()
+                    onConfirm(name.trim(), version.trim(), desc.trim(), language, createSample)
+                }
             ) { Text("创建") }
         },
         dismissButton = {

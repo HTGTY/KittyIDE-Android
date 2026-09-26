@@ -67,7 +67,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -80,6 +82,7 @@ import com.kitty.ide.data.model.ProjectFile
 import com.kitty.ide.data.terminal.TerminalManager
 import com.kitty.ide.ui.component.TerminalPanel
 import com.kitty.ide.ui.viewmodel.EditorViewModel
+import com.kitty.ide.util.NameValidator
 import java.io.File
 
 /** 新建项类型 */
@@ -123,6 +126,7 @@ fun EditorScreen(
     viewModel: EditorViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val projectFiles by viewModel.projectFiles.collectAsState()
     val openFiles by viewModel.openFiles.collectAsState()
     val activeIndex by viewModel.activeFileIndex.collectAsState()
@@ -139,12 +143,27 @@ fun EditorScreen(
     var showTabMenu by remember { mutableStateOf(false) }
     var tabMenuIndex by remember { mutableStateOf(-1) }
 
+    // 空白长按新建菜单
     var showFileTreeMenu by remember { mutableStateOf(false) }
+    // 新建项对话框
     var showNewItemDialog by remember { mutableStateOf(false) }
     var newItemType by remember { mutableStateOf(NewItemType.FILE) }
     var newItemName by remember { mutableStateOf("") }
-
+    var newItemNameError by remember { mutableStateOf<String?>(null) }
     var newItemParentDir by remember { mutableStateOf<File?>(null) }
+
+    // 文件/目录长按操作菜单
+    var fileActionTarget by remember { mutableStateOf<ProjectFile?>(null) }
+    var showFileActionMenu by remember { mutableStateOf(false) }
+
+    // 重命名对话框
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renameValue by remember { mutableStateOf("") }
+    var renameError by remember { mutableStateOf<String?>(null) }
+
+    // 删除确认
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
     var fileTreeVersion by remember { mutableIntStateOf(0) }
     var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
     val expandedMap = remember { mutableStateMapOf<String, Boolean>() }
@@ -202,7 +221,6 @@ fun EditorScreen(
                 TextMenuButton("设置") { onOpenSettings() }
             }
 
-            // ── 终端按钮 ──
             IconButton(onClick = { showTerminal = !showTerminal }) {
                 Icon(
                     imageVector = Icons.Default.Terminal,
@@ -212,7 +230,6 @@ fun EditorScreen(
                 )
             }
 
-            // ── 运行按钮 ──
             IconButton(onClick = {
                 viewModel.saveActiveFile()
 
@@ -311,7 +328,7 @@ fun EditorScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "长按空白区域创建文件或目录",
+                        text = "长按空白 / 文件可弹出菜单",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
@@ -325,6 +342,7 @@ fun EditorScreen(
                             .combinedClickable(
                                 onClick = { },
                                 onLongClick = {
+                                    // 长按空白 → 项目根目录新建
                                     newItemParentDir = null
                                     showFileTreeMenu = true
                                 }
@@ -344,8 +362,9 @@ fun EditorScreen(
                                     }
                                 },
                                 onLongClick = { f ->
-                                    newItemParentDir = f.file
-                                    showFileTreeMenu = true
+                                    // 长按文件/目录 → 弹操作菜单
+                                    fileActionTarget = f
+                                    showFileActionMenu = true
                                 },
                                 viewModel = viewModel
                             )
@@ -386,7 +405,6 @@ fun EditorScreen(
                 }
             }
 
-            // ── 右侧终端面板 ──
             AnimatedVisibility(
                 visible = showTerminal,
                 enter = expandHorizontally(expandFrom = Alignment.End),
@@ -418,44 +436,26 @@ fun EditorScreen(
         )
     }
 
-    // ── 文件树新建菜单 ──
+    // ═════════════════════════════════════════
+    // 对话框们
+    // ═════════════════════════════════════════
+
+    // 空白长按 → 新建菜单（项目根目录）
     if (showFileTreeMenu) {
-        val targetLabel = newItemParentDir?.name ?: "项目根目录"
         AlertDialog(
             onDismissRequest = { showFileTreeMenu = false },
-            title = { Text("在「$targetLabel」中新建") },
+            title = { Text("在「项目根目录」中新建") },
             text = {
                 Column {
-                    MenuOption("📄 新建文件") {
-                        newItemType = NewItemType.FILE
-                        newItemName = ""
-                        showNewItemDialog = true
-                        showFileTreeMenu = false
-                    }
-                    MenuOption("📁 新建文件夹") {
-                        newItemType = NewItemType.FOLDER
-                        newItemName = ""
-                        showNewItemDialog = true
-                        showFileTreeMenu = false
-                    }
-                    MenuOption("🌐 新建 HTML 文件") {
-                        newItemType = NewItemType.HTML
-                        newItemName = ""
-                        showNewItemDialog = true
-                        showFileTreeMenu = false
-                    }
-                    MenuOption("🎨 新建 CSS 文件") {
-                        newItemType = NewItemType.CSS
-                        newItemName = ""
-                        showNewItemDialog = true
-                        showFileTreeMenu = false
-                    }
-                    MenuOption("⚙️ 新建 JS 文件") {
-                        newItemType = NewItemType.JS
-                        newItemName = ""
-                        showNewItemDialog = true
-                        showFileTreeMenu = false
-                    }
+                    NewMenuOptions(
+                        onSelect = { type ->
+                            newItemType = type
+                            newItemName = ""
+                            newItemNameError = null
+                            showNewItemDialog = true
+                            showFileTreeMenu = false
+                        }
+                    )
                 }
             },
             confirmButton = {
@@ -464,45 +464,262 @@ fun EditorScreen(
         )
     }
 
-    if (showNewItemDialog) {
-        NewItemDialog(
-            type = newItemType,
-            value = newItemName,
-            onValueChange = { newItemName = it },
-            onDismiss = { showNewItemDialog = false; newItemName = "" },
-            onConfirm = {
-                val name = newItemName.trim()
-                val targetDir = newItemParentDir ?: projectDir
-                if (name.isNotEmpty() && targetDir != null) {
-                    expandedMap[targetDir.absolutePath] = true
-                    autoExpandChain(targetDir, expandedMap, viewModel)
-
-                    if (newItemType == NewItemType.FOLDER) {
-                        viewModel.createFolder(targetDir, name) { success ->
-                            if (success) {
-                                fileTreeVersion++
-                            } else {
-                                Toast.makeText(context, "创建失败，可能已存在", Toast.LENGTH_SHORT).show()
+    // 文件/目录长按 → 操作菜单
+    if (showFileActionMenu && fileActionTarget != null) {
+        val target = fileActionTarget!!
+        AlertDialog(
+            onDismissRequest = { showFileActionMenu = false; fileActionTarget = null },
+            title = { Text("「${target.name}」") },
+            text = {
+                Column {
+                    if (target.isDirectory) {
+                        // 目录：既支持新建，也支持重命名/删除
+                        NewMenuOptions(
+                            onSelect = { type ->
+                                newItemType = type
+                                newItemName = ""
+                                newItemNameError = null
+                                newItemParentDir = target.file
+                                showNewItemDialog = true
+                                showFileActionMenu = false
+                                fileActionTarget = null
                             }
-                        }
-                    } else {
-                        val ext = newItemType.defaultExt
-                        val fileName = if (ext != null && !name.endsWith(ext)) name + ext else name
-                        viewModel.createFile(targetDir, fileName) { success ->
-                            if (success) {
-                                fileTreeVersion++
-                            } else {
-                                Toast.makeText(context, "创建失败，可能已存在", Toast.LENGTH_SHORT).show()
-                            }
-                        }
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                                .padding(vertical = 4.dp)
+                        )
+                    }
+                    MenuOption("✏️ 重命名") {
+                        renameValue = target.name
+                        renameError = null
+                        showRenameDialog = true
+                        showFileActionMenu = false
+                    }
+                    MenuOption("📋 复制路径") {
+                        clipboard.setText(AnnotatedString(target.file.absolutePath))
+                        Toast.makeText(context, "路径已复制", Toast.LENGTH_SHORT).show()
+                        showFileActionMenu = false
+                        fileActionTarget = null
+                    }
+                    MenuOption("🗑️ 删除") {
+                        showDeleteConfirm = true
+                        showFileActionMenu = false
                     }
                 }
-                showNewItemDialog = false
-                newItemName = ""
-                newItemParentDir = null
+            },
+            confirmButton = {
+                TextButton(onClick = { showFileActionMenu = false; fileActionTarget = null }) {
+                    Text("取消")
+                }
             }
         )
     }
+
+    // 新建项对话框
+    if (showNewItemDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showNewItemDialog = false
+                newItemName = ""
+                newItemNameError = null
+            },
+            title = { Text(newItemType.title) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = newItemName,
+                        onValueChange = {
+                            newItemName = it
+                            newItemNameError = null
+                        },
+                        label = { Text("名称") },
+                        placeholder = { Text(newItemType.hint) },
+                        singleLine = true,
+                        isError = newItemNameError != null,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (newItemNameError != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = newItemNameError!!,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = newItemName
+                        val error = NameValidator.validate(name)
+                        if (error != null) {
+                            newItemNameError = error
+                            return@TextButton
+                        }
+                        val targetDir = newItemParentDir ?: projectDir
+                        if (targetDir != null) {
+                            expandedMap[targetDir.absolutePath] = true
+                            autoExpandChain(targetDir, expandedMap, viewModel)
+
+                            if (newItemType == NewItemType.FOLDER) {
+                                viewModel.createFolder(targetDir, name) { success ->
+                                    if (success) {
+                                        fileTreeVersion++
+                                    } else {
+                                        newItemNameError = "创建失败，可能已存在"
+                                    }
+                                }
+                            } else {
+                                val ext = newItemType.defaultExt
+                                val fileName = if (ext != null && !name.endsWith(ext)) name + ext else name
+                                // 补完后缀后再校验一次（后缀本身就是合法字符，一般没问题）
+                                val finalError = NameValidator.validate(fileName)
+                                if (finalError != null) {
+                                    newItemNameError = finalError
+                                    return@TextButton
+                                }
+                                viewModel.createFile(targetDir, fileName) { success ->
+                                    if (success) {
+                                        fileTreeVersion++
+                                    } else {
+                                        newItemNameError = "创建失败，可能已存在"
+                                    }
+                                }
+                            }
+                            showNewItemDialog = false
+                            newItemName = ""
+                            newItemNameError = null
+                            newItemParentDir = null
+                        }
+                    }
+                ) { Text("创建") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showNewItemDialog = false
+                    newItemName = ""
+                    newItemNameError = null
+                }) { Text("取消") }
+            }
+        )
+    }
+
+    // 重命名对话框
+    if (showRenameDialog && fileActionTarget != null) {
+        val target = fileActionTarget!!
+        AlertDialog(
+            onDismissRequest = {
+                showRenameDialog = false
+                renameValue = ""
+                renameError = null
+            },
+            title = { Text("重命名") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = renameValue,
+                        onValueChange = {
+                            renameValue = it
+                            renameError = null
+                        },
+                        label = { Text("新名称") },
+                        singleLine = true,
+                        isError = renameError != null,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (renameError != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = renameError!!,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val name = renameValue
+                    val error = NameValidator.validate(name)
+                    if (error != null) {
+                        renameError = error
+                        return@TextButton
+                    }
+                    viewModel.renameFile(target.file, name) { success ->
+                        if (success) {
+                            fileTreeVersion++
+                            showRenameDialog = false
+                            renameValue = ""
+                            fileActionTarget = null
+                        } else {
+                            renameError = "重命名失败，可能已存在同名项"
+                        }
+                    }
+                }) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showRenameDialog = false
+                    renameValue = ""
+                    renameError = null
+                }) { Text("取消") }
+            }
+        )
+    }
+
+    // 删除确认对话框
+    if (showDeleteConfirm && fileActionTarget != null) {
+        val target = fileActionTarget!!
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false; fileActionTarget = null },
+            title = { Text("删除确认") },
+            text = {
+                Text(
+                    if (target.isDirectory)
+                        "确定要删除文件夹「${target.name}」及其全部内容吗？此操作不可撤销。"
+                    else
+                        "确定要删除「${target.name}」吗？此操作不可撤销。"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteFile(target.file) { success ->
+                        if (success) {
+                            fileTreeVersion++
+                            Toast.makeText(context, "已删除", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "删除失败", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    showDeleteConfirm = false
+                    fileActionTarget = null
+                }) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showDeleteConfirm = false
+                    fileActionTarget = null
+                }) { Text("取消") }
+            }
+        )
+    }
+}
+
+/**
+ * 新建菜单项（文件/文件夹/HTML/CSS/JS）
+ */
+@Composable
+fun NewMenuOptions(onSelect: (NewItemType) -> Unit) {
+    MenuOption("📄 新建文件") { onSelect(NewItemType.FILE) }
+    MenuOption("📁 新建文件夹") { onSelect(NewItemType.FOLDER) }
+    MenuOption("🌐 新建 HTML 文件") { onSelect(NewItemType.HTML) }
+    MenuOption("🎨 新建 CSS 文件") { onSelect(NewItemType.CSS) }
+    MenuOption("⚙️ 新建 JS 文件") { onSelect(NewItemType.JS) }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -598,39 +815,6 @@ fun MenuOption(text: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(vertical = 12.dp, horizontal = 4.dp)
-    )
-}
-
-@Composable
-fun NewItemDialog(
-    type: NewItemType,
-    value: String,
-    onValueChange: (String) -> Unit,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(type.title) },
-        text = {
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                label = { Text("名称") },
-                placeholder = { Text(type.hint) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = onConfirm,
-                enabled = value.isNotBlank()
-            ) { Text("创建") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        }
     )
 }
 

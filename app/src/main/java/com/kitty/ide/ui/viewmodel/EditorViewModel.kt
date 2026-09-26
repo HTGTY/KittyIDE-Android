@@ -34,12 +34,10 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     val activeFileIndex: StateFlow<Int> = _activeFileIndex
 
     fun loadProject(path: String) {
-        // 如果已经加载过同一个项目，并且已经打开了文件，就跳过重新初始化
         if (_projectDir.value?.absolutePath == path && _openFiles.value.isNotEmpty()) {
             refreshFileTree()
             return
         }
-
         viewModelScope.launch {
             val dir = withContext(Dispatchers.IO) { repository.openProject(path) }
             _projectDir.value = dir
@@ -65,7 +63,6 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 列出某个目录下的子文件（供文件树递归展开使用） */
     fun listChildren(dir: File): List<ProjectFile> = repository.listProjectFiles(dir)
 
     fun openFile(file: File) {
@@ -138,6 +135,73 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    // ── 0.0.14 新增：重命名 ──
+
+    /**
+     * 重命名文件或文件夹。
+     * 如果打开列表里有对应文件，自动更新路径，保持内容不变。
+     */
+    fun renameFile(file: File, newName: String, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val newFile = File(file.parentFile, newName)
+            val result = withContext(Dispatchers.IO) {
+                if (newFile.exists()) return@withContext null
+                if (file.renameTo(newFile)) newFile else null
+            }
+            if (result != null) {
+                // 更新打开列表里的路径
+                val list = _openFiles.value.toMutableList()
+                for (i in list.indices) {
+                    val oldPath = list[i].file.absolutePath
+                    val oldRoot = file.absolutePath
+                    if (oldPath == oldRoot || oldPath.startsWith(oldRoot + File.separator)) {
+                        // 计算相对路径部分
+                        val relative = oldPath.removePrefix(oldRoot)
+                        val newPath = result.absolutePath + relative
+                        list[i] = list[i].copy(file = File(newPath))
+                    }
+                }
+                _openFiles.value = list
+                refreshFileTree()
+                onResult(true)
+            } else {
+                onResult(false)
+            }
+        }
+    }
+
+    // ── 0.0.14 新增：删除 ──
+
+    /**
+     * 删除文件或文件夹。如果打开列表里有对应文件，一并关闭。
+     */
+    fun deleteFile(file: File, onResult: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            val success = withContext(Dispatchers.IO) {
+                if (file.isDirectory) file.deleteRecursively() else file.delete()
+            }
+            if (success) {
+                val oldRoot = file.absolutePath
+                val newList = _openFiles.value.filterNot {
+                    val p = it.file.absolutePath
+                    p == oldRoot || p.startsWith(oldRoot + File.separator)
+                }
+                _openFiles.value = newList
+                _activeFileIndex.value = when {
+                    newList.isEmpty() -> -1
+                    _activeFileIndex.value >= newList.size -> newList.size - 1
+                    else -> _activeFileIndex.value
+                }
+                refreshFileTree()
+                onResult(true)
+            } else {
+                onResult(false)
+            }
+        }
+    }
+
+    // ── 标签菜单操作 ──
 
     fun closeFile(index: Int) {
         val list = _openFiles.value.toMutableList()
