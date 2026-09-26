@@ -113,6 +113,7 @@ fun autoExpandChain(
 fun EditorScreen(
     projectPath: String,
     onBack: () -> Unit,
+    onRun: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: EditorViewModel = viewModel()
 ) {
@@ -200,7 +201,32 @@ fun EditorScreen(
                 TextMenuButton("设置") { }
             }
 
-            IconButton(onClick = { /* TODO 运行 */ }) {
+            // ── 运行按钮 ──
+            IconButton(onClick = {
+                // 先保存当前文件，让运行的是最新内容
+                viewModel.saveActiveFile()
+
+                if (activeIndex !in openFiles.indices) {
+                    Toast.makeText(context, "没有打开的文件", Toast.LENGTH_SHORT).show()
+                    return@IconButton
+                }
+
+                val currentFile = openFiles[activeIndex].file
+                val htmlFile: File? = when {
+                    currentFile.extension.lowercase() == "html" -> currentFile
+                    else -> {
+                        // 当前不是 HTML，找同目录下的 index.html
+                        val sibling = File(currentFile.parentFile, "index.html")
+                        if (sibling.exists()) sibling else null
+                    }
+                }
+
+                if (htmlFile != null) {
+                    onRun(htmlFile.absolutePath)
+                } else {
+                    Toast.makeText(context, "没有找到可运行的 HTML 文件", Toast.LENGTH_SHORT).show()
+                }
+            }) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
                     contentDescription = "运行",
@@ -274,7 +300,6 @@ fun EditorScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(4.dp))
-                    // 新增：长按提示小字
                     Text(
                         text = "长按空白区域创建文件或目录",
                         style = MaterialTheme.typography.labelSmall,
@@ -290,7 +315,6 @@ fun EditorScreen(
                             .combinedClickable(
                                 onClick = { },
                                 onLongClick = {
-                                    // 长按空白处 → 项目根目录
                                     newItemParentDir = null
                                     showFileTreeMenu = true
                                 }
@@ -310,7 +334,6 @@ fun EditorScreen(
                                     }
                                 },
                                 onLongClick = { f ->
-                                    // 长按文件夹 → 在该文件夹内新建
                                     newItemParentDir = f.file
                                     showFileTreeMenu = true
                                 },
@@ -337,7 +360,6 @@ fun EditorScreen(
                     modifier = Modifier.weight(1f).fillMaxHeight()
                 )
             } else {
-                // 空状态：两行提示
                 Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
@@ -428,7 +450,6 @@ fun EditorScreen(
                 val name = newItemName.trim()
                 val targetDir = newItemParentDir ?: projectDir
                 if (name.isNotEmpty() && targetDir != null) {
-                    // 创建成功后，自动展开该目录（并链式展开单链子目录）
                     expandedMap[targetDir.absolutePath] = true
                     autoExpandChain(targetDir, expandedMap, viewModel)
 
@@ -460,10 +481,6 @@ fun EditorScreen(
     }
 }
 
-/**
- * 文件树递归渲染项
- * 支持：点击目录展开/折叠（带平滑动画 + 单链自动展开）、点击文件打开、长按触发新建菜单
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FileTreeItem(
@@ -479,7 +496,6 @@ fun FileTreeItem(
     val isExpanded = expandedMap[path] == true
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // 当前项的 Row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -488,7 +504,6 @@ fun FileTreeItem(
                         if (file.isDirectory) {
                             val willExpand = !isExpanded
                             expandedMap[path] = willExpand
-                            // 展开时，自动链式展开单链目录
                             if (willExpand) {
                                 autoExpandChain(file.file, expandedMap, viewModel)
                             }
@@ -522,7 +537,6 @@ fun FileTreeItem(
             )
         }
 
-        // 子项区域，带平滑展开/收起动画
         if (file.isDirectory) {
             AnimatedVisibility(
                 visible = isExpanded,

@@ -7,15 +7,20 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.kitty.ide.ui.screen.EditorScreen
+import com.kitty.ide.ui.screen.PreviewScreen
 import com.kitty.ide.ui.screen.StartScreen
 
 object KittyRoute {
     const val START = "start"
     const val EDITOR = "editor/{projectPath}"
+    const val PREVIEW = "preview/{htmlPath}"
 
-    /** 构建编辑器页面的导航路由，对路径进行 Uri 编码，避免斜杠等特殊字符导致导航解析失败 */
     fun editor(projectPath: String): String {
         return "editor/${Uri.encode(projectPath)}"
+    }
+
+    fun preview(htmlPath: String): String {
+        return "preview/${Uri.encode(htmlPath)}"
     }
 }
 
@@ -40,6 +45,18 @@ fun KittyNavHost(
             val projectPath = Uri.decode(encodedPath)
             EditorScreen(
                 projectPath = projectPath,
+                onBack = { navController.popBackStack() },
+                onRun = { htmlPath ->
+                    navController.navigate(KittyRoute.preview(htmlPath))
+                }
+            )
+        }
+
+        composable(KittyRoute.PREVIEW) { backStackEntry ->
+            val encodedPath = backStackEntry.arguments?.getString("htmlPath") ?: ""
+            val htmlPath = Uri.decode(encodedPath)
+            PreviewScreen(
+                htmlPath = htmlPath,
                 onBack = { navController.popBackStack() }
             )
         }
