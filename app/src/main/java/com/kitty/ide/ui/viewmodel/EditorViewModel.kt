@@ -34,6 +34,12 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     val activeFileIndex: StateFlow<Int> = _activeFileIndex
 
     fun loadProject(path: String) {
+        // 如果已经加载过同一个项目，并且已经打开了文件，就跳过重新初始化
+        if (_projectDir.value?.absolutePath == path && _openFiles.value.isNotEmpty()) {
+            refreshFileTree()
+            return
+        }
+
         viewModelScope.launch {
             val dir = withContext(Dispatchers.IO) { repository.openProject(path) }
             _projectDir.value = dir
@@ -108,8 +114,6 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         return false
     }
 
-    // ── 新建文件/文件夹（parentDir 指定在哪个目录下创建） ──
-
     fun createFile(parentDir: File, fileName: String, onResult: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             val file = withContext(Dispatchers.IO) { repository.createFile(parentDir, fileName) }
@@ -134,8 +138,6 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
-
-    // ── 标签菜单操作 ──
 
     fun closeFile(index: Int) {
         val list = _openFiles.value.toMutableList()
