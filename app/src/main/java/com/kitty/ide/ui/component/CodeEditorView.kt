@@ -1,61 +1,64 @@
 package com.kitty.ide.ui.component
 
-import android.annotation.SuppressLint
-import android.webkit.JavascriptInterface
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState as rememberHorizontalScrollState
 
-@SuppressLint("SetJavaScriptEnabled")
+/**
+ * 纯原生 Compose 编辑器（0.0.1 版：能打字、黑底白字、等宽字体）
+ * 后续可替换为 Sora Editor 或自定义高亮
+ */
 @Composable
 fun CodeEditorView(
-    initialContent: String = "",
-    onContentChanged: (String) -> Unit,
+    code: String,
+    onCodeChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val webViewState = remember { mutableStateOf<WebView?>(null) }
+    val verticalScroll = rememberScrollState()
+    val horizontalScroll = rememberHorizontalScrollState()
 
-    AndroidView(
-        modifier = modifier.fillMaxSize(),
-        factory = { context ->
-            WebView(context).apply {
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.allowFileAccess = true
-                // 允许混合内容（CDN是https，但本地asset是file）
-                settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-
-                webViewClient = WebViewClient()
-
-                // 添加 JS 桥接
-                addJavascriptInterface(object {
-                    @JavascriptInterface
-                    fun onContentChanged(newContent: String) {
-                        // 注意：这里在子线程，需要切回主线程更新 Compose 状态
-                        webViewState.value?.post {
-                            onContentChanged(newContent)
-                        }
-                    }
-                }, "AndroidBridge")
-
-                loadUrl("file:///android_asset/editor/index.html")
-
-                webViewState.value = this
-            }
-        },
-        update = { webView ->
-            // 如果外部传入了初始内容，在页面加载完成后注入
-            if (initialContent.isNotEmpty()) {
-                webView.evaluateJavascript(
-                    "window.setEditorContent(`${initialContent.replace("`", "\\`")}`);",
-                    null
-                )
-            }
-        }
-    )
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFF1E1E1E)) // VS Code 深色背景
+            .padding(8.dp)
+    ) {
+        BasicTextField(
+            value = code,
+            onValueChange = onCodeChange,
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(verticalScroll)
+                .horizontalScroll(horizontalScroll),
+            textStyle = TextStyle(
+                color = Color(0xFFD4D4D4), // VS Code 默认文字颜色
+                fontFamily = FontFamily.Monospace, // 等宽字体
+                fontSize = 15.sp,
+                lineHeight = 22.sp
+            ),
+            cursorBrush = SolidColor(Color(0xFF007ACC)), // VS Code 蓝色光标
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.None, // 代码不自动大写
+                autoCorrect = false // 关闭自动纠错
+            )
+        )
+    }
 }

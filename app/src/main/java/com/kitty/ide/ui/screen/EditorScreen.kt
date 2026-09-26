@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -28,6 +29,7 @@ fun EditorScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // 用一个状态来保存当前编辑的代码
     var currentCode by remember { mutableStateOf("") }
 
     Column(
@@ -35,10 +37,11 @@ fun EditorScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // 顶栏占位
+        // 顶栏
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .height(48.dp)
                 .background(MaterialTheme.colorScheme.surface),
             verticalAlignment = Alignment.CenterVertically
@@ -57,17 +60,16 @@ fun EditorScreen(
             )
         }
 
-        // ── 真正的编辑器区域 ──
+        // 原生编辑器区域
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
         ) {
             CodeEditorView(
-                initialContent = "", // 后续接文件系统后，这里替换成文件内容
-                onContentChanged = { newCode ->
+                code = currentCode,
+                onCodeChange = { newCode ->
                     currentCode = newCode
-                    // 后续在这里标记文件为“已修改”状态
                 }
             )
         }
