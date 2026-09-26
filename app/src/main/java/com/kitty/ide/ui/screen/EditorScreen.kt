@@ -2,7 +2,9 @@ package com.kitty.ide.ui.screen
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -35,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -74,6 +77,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kitty.ide.data.model.FileType
 import com.kitty.ide.data.model.ProjectFile
+import com.kitty.ide.data.terminal.TerminalManager
+import com.kitty.ide.ui.component.TerminalPanel
 import com.kitty.ide.ui.viewmodel.EditorViewModel
 import java.io.File
 
@@ -87,8 +92,7 @@ enum class NewItemType(val title: String, val defaultExt: String?, val hint: Str
 }
 
 /**
- * 单链目录自动展开：
- * 从 dir 开始，若其下只有一个子项且是目录，就自动展开它，一路递归下去。
+ * 单链目录自动展开
  */
 fun autoExpandChain(
     dir: File,
@@ -130,6 +134,8 @@ fun EditorScreen(
         label = "drawerWidth"
     )
 
+    var showTerminal by remember { mutableStateOf(false) }
+
     var showTabMenu by remember { mutableStateOf(false) }
     var tabMenuIndex by remember { mutableStateOf(-1) }
 
@@ -138,14 +144,9 @@ fun EditorScreen(
     var newItemType by remember { mutableStateOf(NewItemType.FILE) }
     var newItemName by remember { mutableStateOf("") }
 
-    // 记录新建项的父目录，null 表示项目根目录
     var newItemParentDir by remember { mutableStateOf<File?>(null) }
-
-    // 文件树版本号，用于强制刷新子目录缓存
     var fileTreeVersion by remember { mutableIntStateOf(0) }
-
     var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
-
     val expandedMap = remember { mutableStateMapOf<String, Boolean>() }
 
     LaunchedEffect(activeIndex) {
@@ -175,7 +176,6 @@ fun EditorScreen(
                 .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 左上角图标：抽屉关闭时 ☰，打开时 ⬅️
             IconButton(onClick = { isDrawerOpen = !isDrawerOpen }) {
                 Icon(
                     imageVector = if (isDrawerOpen) Icons.AutoMirrored.Filled.ArrowBack
@@ -202,9 +202,18 @@ fun EditorScreen(
                 TextMenuButton("设置") { onOpenSettings() }
             }
 
+            // ── 终端按钮 ──
+            IconButton(onClick = { showTerminal = !showTerminal }) {
+                Icon(
+                    imageVector = Icons.Default.Terminal,
+                    contentDescription = "终端",
+                    tint = if (showTerminal) MaterialTheme.colorScheme.primary
+                           else MaterialTheme.colorScheme.onSurface
+                )
+            }
+
             // ── 运行按钮 ──
             IconButton(onClick = {
-                // 先保存当前文件，让运行的是最新内容
                 viewModel.saveActiveFile()
 
                 if (activeIndex !in openFiles.indices) {
@@ -216,13 +225,13 @@ fun EditorScreen(
                 val htmlFile: File? = when {
                     currentFile.extension.lowercase() == "html" -> currentFile
                     else -> {
-                        // 当前不是 HTML，找同目录下的 index.html
                         val sibling = File(currentFile.parentFile, "index.html")
                         if (sibling.exists()) sibling else null
                     }
                 }
 
                 if (htmlFile != null) {
+                    TerminalManager.clear()
                     onRun(htmlFile.absolutePath)
                 } else {
                     Toast.makeText(context, "没有找到可运行的 HTML 文件", Toast.LENGTH_SHORT).show()
@@ -285,7 +294,7 @@ fun EditorScreen(
             }
         }
 
-        // ── 主体区域：文件树 + 编辑区 ──
+        // ── 主体区域：文件树 + 编辑区 + 终端 ──
         Row(modifier = Modifier.weight(1f)) {
             if (drawerWidth > 0.dp) {
                 Column(
@@ -375,6 +384,20 @@ fun EditorScreen(
                         )
                     }
                 }
+            }
+
+            // ── 右侧终端面板 ──
+            AnimatedVisibility(
+                visible = showTerminal,
+                enter = expandHorizontally(expandFrom = Alignment.End),
+                exit = shrinkHorizontally(shrinkTowards = Alignment.End)
+            ) {
+                TerminalPanel(
+                    onClose = { showTerminal = false },
+                    modifier = Modifier
+                        .width(240.dp)
+                        .fillMaxHeight()
+                )
             }
         }
 
