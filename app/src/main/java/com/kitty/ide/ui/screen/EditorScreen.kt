@@ -143,8 +143,9 @@ fun EditorScreen(
     var showTabMenu by remember { mutableStateOf(false) }
     var tabMenuIndex by remember { mutableStateOf(-1) }
 
-    // 空白长按新建菜单
+    // 空白长按新建菜单（项目根目录）
     var showFileTreeMenu by remember { mutableStateOf(false) }
+
     // 新建项对话框
     var showNewItemDialog by remember { mutableStateOf(false) }
     var newItemType by remember { mutableStateOf(NewItemType.FILE) }
@@ -152,17 +153,18 @@ fun EditorScreen(
     var newItemNameError by remember { mutableStateOf<String?>(null) }
     var newItemParentDir by remember { mutableStateOf<File?>(null) }
 
-    // 文件/目录长按操作菜单
-    var fileActionTarget by remember { mutableStateOf<ProjectFile?>(null) }
-    var showFileActionMenu by remember { mutableStateOf(false) }
+    // 小菜单：当前展开菜单的项路径（null 表示无）
+    var expandedMenuPath by remember { mutableStateOf<String?>(null) }
 
     // 重命名对话框
     var showRenameDialog by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<ProjectFile?>(null) }
     var renameValue by remember { mutableStateOf("") }
     var renameError by remember { mutableStateOf<String?>(null) }
 
     // 删除确认
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<ProjectFile?>(null) }
 
     var fileTreeVersion by remember { mutableIntStateOf(0) }
     var textFieldValue by remember { mutableStateOf(TextFieldValue("")) }
@@ -178,6 +180,32 @@ fun EditorScreen(
 
     LaunchedEffect(projectPath) {
         viewModel.loadProject(projectPath)
+    }
+
+    // ── 菜单动作处理 ──
+    fun handleNewItem(parent: File, type: NewItemType) {
+        newItemType = type
+        newItemName = ""
+        newItemNameError = null
+        newItemParentDir = parent
+        showNewItemDialog = true
+    }
+
+    fun handleRename(target: ProjectFile) {
+        renameTarget = target
+        renameValue = target.name
+        renameError = null
+        showRenameDialog = true
+    }
+
+    fun handleCopyPath(target: ProjectFile) {
+        clipboard.setText(AnnotatedString(target.file.absolutePath))
+        Toast.makeText(context, "路径已复制", Toast.LENGTH_SHORT).show()
+    }
+
+    fun handleDelete(target: ProjectFile) {
+        deleteTarget = target
+        showDeleteConfirm = true
     }
 
     Column(
@@ -232,12 +260,10 @@ fun EditorScreen(
 
             IconButton(onClick = {
                 viewModel.saveActiveFile()
-
                 if (activeIndex !in openFiles.indices) {
                     Toast.makeText(context, "没有打开的文件", Toast.LENGTH_SHORT).show()
                     return@IconButton
                 }
-
                 val currentFile = openFiles[activeIndex].file
                 val htmlFile: File? = when {
                     currentFile.extension.lowercase() == "html" -> currentFile
@@ -246,7 +272,6 @@ fun EditorScreen(
                         if (sibling.exists()) sibling else null
                     }
                 }
-
                 if (htmlFile != null) {
                     TerminalManager.clear()
                     onRun(htmlFile.absolutePath)
@@ -342,7 +367,6 @@ fun EditorScreen(
                             .combinedClickable(
                                 onClick = { },
                                 onLongClick = {
-                                    // 长按空白 → 项目根目录新建
                                     newItemParentDir = null
                                     showFileTreeMenu = true
                                 }
@@ -354,6 +378,8 @@ fun EditorScreen(
                                 depth = 0,
                                 expandedMap = expandedMap,
                                 version = fileTreeVersion,
+                                expandedMenuPath = expandedMenuPath,
+                                onMenuToggle = { expandedMenuPath = it },
                                 onFileClick = { f ->
                                     if (f.fileType == FileType.TEXT) {
                                         viewModel.openFile(f.file)
@@ -361,11 +387,10 @@ fun EditorScreen(
                                         Toast.makeText(context, "暂不支持预览此格式", Toast.LENGTH_SHORT).show()
                                     }
                                 },
-                                onLongClick = { f ->
-                                    // 长按文件/目录 → 弹操作菜单
-                                    fileActionTarget = f
-                                    showFileActionMenu = true
-                                },
+                                onNewItem = { parent, type -> handleNewItem(parent, type) },
+                                onRename = { handleRename(it) },
+                                onCopyPath = { handleCopyPath(it) },
+                                onDelete = { handleDelete(it) },
                                 viewModel = viewModel
                             )
                         }
@@ -440,7 +465,7 @@ fun EditorScreen(
     // 对话框们
     // ═════════════════════════════════════════
 
-    // 空白长按 → 新建菜单（项目根目录）
+    // 空白长按 → 在项目根目录新建
     if (showFileTreeMenu) {
         AlertDialog(
             onDismissRequest = { showFileTreeMenu = false },
@@ -452,6 +477,7 @@ fun EditorScreen(
                             newItemType = type
                             newItemName = ""
                             newItemNameError = null
+                            newItemParentDir = null
                             showNewItemDialog = true
                             showFileTreeMenu = false
                         }
@@ -460,61 +486,6 @@ fun EditorScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showFileTreeMenu = false }) { Text("取消") }
-            }
-        )
-    }
-
-    // 文件/目录长按 → 操作菜单
-    if (showFileActionMenu && fileActionTarget != null) {
-        val target = fileActionTarget!!
-        AlertDialog(
-            onDismissRequest = { showFileActionMenu = false; fileActionTarget = null },
-            title = { Text("「${target.name}」") },
-            text = {
-                Column {
-                    if (target.isDirectory) {
-                        // 目录：既支持新建，也支持重命名/删除
-                        NewMenuOptions(
-                            onSelect = { type ->
-                                newItemType = type
-                                newItemName = ""
-                                newItemNameError = null
-                                newItemParentDir = target.file
-                                showNewItemDialog = true
-                                showFileActionMenu = false
-                                fileActionTarget = null
-                            }
-                        )
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                                .padding(vertical = 4.dp)
-                        )
-                    }
-                    MenuOption("✏️ 重命名") {
-                        renameValue = target.name
-                        renameError = null
-                        showRenameDialog = true
-                        showFileActionMenu = false
-                    }
-                    MenuOption("📋 复制路径") {
-                        clipboard.setText(AnnotatedString(target.file.absolutePath))
-                        Toast.makeText(context, "路径已复制", Toast.LENGTH_SHORT).show()
-                        showFileActionMenu = false
-                        fileActionTarget = null
-                    }
-                    MenuOption("🗑️ 删除") {
-                        showDeleteConfirm = true
-                        showFileActionMenu = false
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showFileActionMenu = false; fileActionTarget = null }) {
-                    Text("取消")
-                }
             }
         )
     }
@@ -577,7 +548,6 @@ fun EditorScreen(
                             } else {
                                 val ext = newItemType.defaultExt
                                 val fileName = if (ext != null && !name.endsWith(ext)) name + ext else name
-                                // 补完后缀后再校验一次（后缀本身就是合法字符，一般没问题）
                                 val finalError = NameValidator.validate(fileName)
                                 if (finalError != null) {
                                     newItemNameError = finalError
@@ -610,13 +580,14 @@ fun EditorScreen(
     }
 
     // 重命名对话框
-    if (showRenameDialog && fileActionTarget != null) {
-        val target = fileActionTarget!!
+    if (showRenameDialog && renameTarget != null) {
+        val target = renameTarget!!
         AlertDialog(
             onDismissRequest = {
                 showRenameDialog = false
                 renameValue = ""
                 renameError = null
+                renameTarget = null
             },
             title = { Text("重命名") },
             text = {
@@ -655,7 +626,7 @@ fun EditorScreen(
                             fileTreeVersion++
                             showRenameDialog = false
                             renameValue = ""
-                            fileActionTarget = null
+                            renameTarget = null
                         } else {
                             renameError = "重命名失败，可能已存在同名项"
                         }
@@ -667,16 +638,17 @@ fun EditorScreen(
                     showRenameDialog = false
                     renameValue = ""
                     renameError = null
+                    renameTarget = null
                 }) { Text("取消") }
             }
         )
     }
 
-    // 删除确认对话框
-    if (showDeleteConfirm && fileActionTarget != null) {
-        val target = fileActionTarget!!
+    // 删除确认
+    if (showDeleteConfirm && deleteTarget != null) {
+        val target = deleteTarget!!
         AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false; fileActionTarget = null },
+            onDismissRequest = { showDeleteConfirm = false; deleteTarget = null },
             title = { Text("删除确认") },
             text = {
                 Text(
@@ -697,13 +669,13 @@ fun EditorScreen(
                         }
                     }
                     showDeleteConfirm = false
-                    fileActionTarget = null
+                    deleteTarget = null
                 }) { Text("删除") }
             },
             dismissButton = {
                 TextButton(onClick = {
                     showDeleteConfirm = false
-                    fileActionTarget = null
+                    deleteTarget = null
                 }) { Text("取消") }
             }
         )
@@ -722,6 +694,10 @@ fun NewMenuOptions(onSelect: (NewItemType) -> Unit) {
     MenuOption("⚙️ 新建 JS 文件") { onSelect(NewItemType.JS) }
 }
 
+/**
+ * 文件树递归渲染项
+ * 长按弹出小菜单（DropdownMenu），锚定在对应项的位置
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FileTreeItem(
@@ -729,53 +705,119 @@ fun FileTreeItem(
     depth: Int,
     expandedMap: MutableMap<String, Boolean>,
     version: Int,
+    expandedMenuPath: String?,
+    onMenuToggle: (String?) -> Unit,
     onFileClick: (ProjectFile) -> Unit,
-    onLongClick: (ProjectFile) -> Unit,
+    onNewItem: (File, NewItemType) -> Unit,
+    onRename: (ProjectFile) -> Unit,
+    onCopyPath: (ProjectFile) -> Unit,
+    onDelete: (ProjectFile) -> Unit,
     viewModel: EditorViewModel
 ) {
     val path = file.file.absolutePath
     val isExpanded = expandedMap[path] == true
+    val menuExpanded = expandedMenuPath == path
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .combinedClickable(
-                    onClick = {
-                        if (file.isDirectory) {
-                            val willExpand = !isExpanded
-                            expandedMap[path] = willExpand
-                            if (willExpand) {
-                                autoExpandChain(file.file, expandedMap, viewModel)
+        Box {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = {
+                            if (file.isDirectory) {
+                                val willExpand = !isExpanded
+                                expandedMap[path] = willExpand
+                                if (willExpand) {
+                                    autoExpandChain(file.file, expandedMap, viewModel)
+                                }
+                            } else {
+                                onFileClick(file)
                             }
-                        } else {
-                            onFileClick(file)
-                        }
-                    },
-                    onLongClick = { onLongClick(file) }
+                        },
+                        onLongClick = { onMenuToggle(path) }
+                    )
+                    .padding(
+                        start = (depth * 16).dp,
+                        top = 8.dp,
+                        bottom = 8.dp
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (file.isDirectory) (if (isExpanded) "▼" else "▶") else "",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 10.sp,
+                    modifier = Modifier.width(16.dp)
                 )
-                .padding(
-                    start = (depth * 16).dp,
-                    top = 8.dp,
-                    bottom = 8.dp
-                ),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = if (file.isDirectory) (if (isExpanded) "▼" else "▶") else "",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 10.sp,
-                modifier = Modifier.width(16.dp)
-            )
-            Text(
-                text = if (file.isDirectory) "📁" else "📄",
-                modifier = Modifier.padding(end = 8.dp)
-            )
-            Text(
-                text = file.name,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+                Text(
+                    text = if (file.isDirectory) "📁" else "📄",
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                Text(
+                    text = file.name,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            // ── 小菜单：锚定在当前项 ──
+            // 当前共 9 项（目录）≤ 10，平铺即可
+            // 若将来菜单项超过 10 个，考虑用二级菜单收纳"新建"子项
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { onMenuToggle(null) }
+            ) {
+                if (file.isDirectory) {
+                    // ── 目录：9 项，平铺 ──
+                    DropdownMenuItem(
+                        text = { Text("📄 新建文件") },
+                        onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.FILE) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("📁 新建文件夹") },
+                        onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.FOLDER) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("🌐 新建 HTML 文件") },
+                        onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.HTML) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("🎨 新建 CSS 文件") },
+                        onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.CSS) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("⚙️ 新建 JS 文件") },
+                        onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.JS) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("✏️ 重命名") },
+                        onClick = { onMenuToggle(null); onRename(file) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("📋 复制路径") },
+                        onClick = { onMenuToggle(null); onCopyPath(file) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("🗑️ 删除") },
+                        onClick = { onMenuToggle(null); onDelete(file) }
+                    )
+                } else {
+                    // ── 文件：3 项 ──
+                    DropdownMenuItem(
+                        text = { Text("✏️ 重命名") },
+                        onClick = { onMenuToggle(null); onRename(file) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("📋 复制路径") },
+                        onClick = { onMenuToggle(null); onCopyPath(file) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("🗑️ 删除") },
+                        onClick = { onMenuToggle(null); onDelete(file) }
+                    )
+                }
+            }
         }
 
         if (file.isDirectory) {
@@ -794,8 +836,13 @@ fun FileTreeItem(
                             depth = depth + 1,
                             expandedMap = expandedMap,
                             version = version,
+                            expandedMenuPath = expandedMenuPath,
+                            onMenuToggle = onMenuToggle,
                             onFileClick = onFileClick,
-                            onLongClick = onLongClick,
+                            onNewItem = onNewItem,
+                            onRename = onRename,
+                            onCopyPath = onCopyPath,
+                            onDelete = onDelete,
                             viewModel = viewModel
                         )
                     }
