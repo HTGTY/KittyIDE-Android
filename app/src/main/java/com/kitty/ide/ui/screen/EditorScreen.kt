@@ -33,7 +33,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -173,10 +173,11 @@ fun EditorScreen(
                 .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 左上角图标：抽屉关闭时 ☰，打开时 ⬅️
             IconButton(onClick = { isDrawerOpen = !isDrawerOpen }) {
                 Icon(
                     imageVector = if (isDrawerOpen) Icons.AutoMirrored.Filled.ArrowBack
-                                  else Icons.AutoMirrored.Filled.ArrowForward,
+                                  else Icons.Default.Menu,
                     contentDescription = "切换文件树",
                     tint = MaterialTheme.colorScheme.onSurface
                 )
@@ -272,6 +273,13 @@ fun EditorScreen(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(Modifier.height(4.dp))
+                    // 新增：长按提示小字
+                    Text(
+                        text = "长按空白区域创建文件或目录",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
                     Spacer(Modifier.height(8.dp))
 
                     Column(
@@ -329,8 +337,20 @@ fun EditorScreen(
                     modifier = Modifier.weight(1f).fillMaxHeight()
                 )
             } else {
+                // 空状态：两行提示
                 Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                    Text("没有打开的文件", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "没有打开的文件",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "点击左上角展开文件树",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             }
         }
