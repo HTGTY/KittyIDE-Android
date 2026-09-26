@@ -2,7 +2,7 @@ package com.kitty.ide.ui.screen
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.clickable // 👈 就是这行缺失了！
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -46,14 +46,14 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun EditorScreen(
+    projectUri: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     // === 页面状态 ===
     var isDrawerOpen by remember { mutableStateOf(false) }
-    var codeText by remember { mutableStateOf("") } // 暂时使用单一变量，等待接文件系统
+    var codeText by remember { mutableStateOf("") }
 
-    // 左侧文件树抽屉宽度的动画
     val drawerWidth by animateDpAsState(
         targetValue = if (isDrawerOpen) 240.dp else 0.dp,
         label = "drawerWidth"
@@ -78,7 +78,7 @@ fun EditorScreen(
         ) {
             IconButton(onClick = { isDrawerOpen = !isDrawerOpen }) {
                 Icon(
-                    imageVector = if (isDrawerOpen) Icons.AutoMirrored.Filled.ArrowBack 
+                    imageVector = if (isDrawerOpen) Icons.AutoMirrored.Filled.ArrowBack
                                   else Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = "切换文件树",
                     tint = MaterialTheme.colorScheme.onSurface
@@ -106,7 +106,7 @@ fun EditorScreen(
         }
 
         // ═══════════════════════════════════════
-        // 第二行：多文件标签栏（纯占位，暂不接逻辑）
+        // 第二行：多文件标签栏（占位）
         // ═══════════════════════════════════════
         Row(
             modifier = Modifier
@@ -116,7 +116,6 @@ fun EditorScreen(
                 .horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 先硬编码一个标签，等以后接了文件系统，这里就变成循环列表
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -136,8 +135,7 @@ fun EditorScreen(
         // 主体区域：文件树 + 编辑区
         // ═══════════════════════════════════════
         Row(modifier = Modifier.weight(1f)) {
-
-            // 【左侧】文件树抽屉（预留）
+            // 【左侧】文件树抽屉（占位）
             if (drawerWidth > 0.dp) {
                 Column(
                     modifier = Modifier
@@ -152,7 +150,11 @@ fun EditorScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(8.dp))
-                    Text("（文件树占位）", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        text = "项目路径:\n$projectUri", // 显示传入的 URI，证明导航传参成功
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
 
@@ -175,17 +177,11 @@ fun TextMenuButton(text: String, onClick: () -> Unit) {
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick) // 这里用到了 clickable，上面已修复导入
             .padding(horizontal = 12.dp)
     )
 }
 
-/**
- * 纯代码编辑区：
- * 1. 行号与代码完美对齐
- * 2. 支持双指捏合缩放字体
- * 3. 代码过长时横向滚动，不自动缩小字体
- */
 @Composable
 fun CodeEditorWithLineNumbers(
     code: String,
@@ -195,17 +191,13 @@ fun CodeEditorWithLineNumbers(
     val verticalScrollState = rememberScrollState()
     val horizontalScrollState = rememberScrollState()
     val lineCount = code.lines().size.coerceAtLeast(1)
-
-    // 字体大小，允许在 10sp 到 30sp 之间缩放
     var fontSize by remember { mutableFloatStateOf(15f) }
-    // 保持行高和字体大小的比例（1.5倍），保证行号和代码对齐
     val lineHeight = fontSize * 1.5f
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF1E1E1E))
-            // 监听双指捏合手势，只改变字体大小，不改变布局宽度
             .pointerInput(Unit) {
                 detectTransformGestures { _, _, zoom, _ ->
                     fontSize = (fontSize * zoom).coerceIn(10f, 30f)
@@ -213,7 +205,7 @@ fun CodeEditorWithLineNumbers(
             }
     ) {
         Row(modifier = Modifier.fillMaxSize()) {
-            // ── 左侧：行号栏 ──
+            // 行号
             Column(
                 modifier = Modifier
                     .width(48.dp)
@@ -233,15 +225,12 @@ fun CodeEditorWithLineNumbers(
                     )
                 }
             }
-
-            // ── 右侧：代码输入区 ──
+            // 输入区
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    // 纵向滚动同步
                     .verticalScroll(verticalScrollState)
-                    // 横向滚动（代码太长就在这里滑，绝不自动缩放字体）
                     .horizontalScroll(horizontalScrollState)
                     .padding(top = 8.dp, bottom = 8.dp)
             ) {
