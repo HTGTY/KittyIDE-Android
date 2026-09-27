@@ -11,10 +11,13 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -29,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -71,6 +75,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,13 +87,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.changedToDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -144,6 +142,157 @@ fun autoExpandChain(
             break
         }
     }
+}
+
+/**
+ * 回车自动缩进：
+ * - 在 {} 之间回车 → 展开成三行，中间一层缩进，末行不缩进
+ * - 在 <> 之间回车 → 同上
+ * - 在单个 { 或 < 之后回车 → 只补一层缩进
+ * - 普通换行 → 继承上一行的缩进
+ */
+private fun applyAutoIndent(old: TextFieldValue, new: TextFieldValue): TextFieldValue {
+    val oldText = old.text
+    val newText = new.text
+
+    // 只处理"长度 +1"的单字符插入
+    if (newText.length != oldText.length + 1) return new
+
+    val cursor = new.selection.start
+    if (cursor <= 0 || cursor > newText.length) return new
+
+    val insertedPos = cursor - 1
+    if (insertedPos < 0 || insertedPos >= newText.length) return new
+    val insertedChar = newText[insertedPos]
+
+    // ── 特殊：用户输入 } 时，自动对齐到匹配的 { 的缩进 ──
+    if (insertedChar == '}') {
+        val aligned = alignClosingBrace(newText, insertedPos, cursor)
+        if (aligned != null) return aligned
+    }
+
+    // 后续逻辑只处理换行
+    if (insertedChar != '\n') return new
+
+    val newlinePos = insertedPos
+    val charBefore = if (newlinePos > 0) newText[newlinePos - 1] else null
+    val charAfter = if (cursor < newText.length) newText[cursor] else null
+
+    val unit = "    "
+
+    // 计算某个位置所在行的前导缩进
+    fun computeCurrentIndent(pos: Int): String {
+        val lineStart = newText.lastIndexOf('\n', pos - 1) + 1
+        if (lineStart < 0 || lineStart > pos) return ""
+        val line = newText.substring(lineStart, pos)
+        return line.takeWhile { it == ' ' || it == '\t' }
+    }
+
+    // 场景 1：在 {} 之间回车 → 展开成三行
+    if (charBefore == '{' && charAfter == '}') {
+        val currentIndent = computeCurrentIndent(newlinePos - 1)
+        val innerIndent = currentIndent + unit
+
+        val updated = newText.substring(0, newlinePos + 1) +
+                innerIndent + "\n" +
+                currentIndent +
+                newText.substring(newlinePos + 1)
+        val newCursor = newlinePos + 1 + innerIndent.length
+        return TextFieldValue(updated, TextRange(newCursor))
+    }
+
+    // 场景 2：在 <> 之间回车
+    if (charBefore == '<' && charAfter == '>') {
+        val currentIndent = computeCurrentIndent(newlinePos - 1)
+        val innerIndent = currentIndent + unit
+
+        val updated = newText.substring(0, newlinePos + 1) +
+                innerIndent + "\n" +
+                currentIndent +
+                newText.substring(newlinePos + 1)
+        val newCursor = newlinePos + 1 + innerIndent.length
+        return TextFieldValue(updated, TextRange(newCursor))
+    }
+
+    // 场景 3：在单个 { 或 < 之后回车，下一行缩进 = 父缩进 + 4
+    if (charBefore == '{' || charBefore == '<') {
+        val currentIndent = computeCurrentIndent(newlinePos - 1)
+        val innerIndent = currentIndent + unit
+
+        val updated = newText.substring(0, newlinePos + 1) +
+                innerIndent +
+                newText.substring(newlinePos + 1)
+        val newCursor = newlinePos + 1 + innerIndent.length
+        return TextFieldValue(updated, TextRange(newCursor))
+    }
+
+    // 场景 4：继承上一行的缩进
+    val lineStart = newText.lastIndexOf('\n', newlinePos - 1) + 1
+    if (lineStart in 0 until newlinePos) {
+        val currentLine = newText.substring(lineStart, newlinePos)
+        val leadingIndent = currentLine.takeWhile { it == ' ' || it == '\t' }
+        if (leadingIndent.isNotEmpty()) {
+            val updated = newText.substring(0, newlinePos + 1) +
+                    leadingIndent +
+                    newText.substring(newlinePos + 1)
+            val newCursor = newlinePos + 1 + leadingIndent.length
+            return TextFieldValue(updated, TextRange(newCursor))
+        }
+    }
+
+    return new
+}
+
+/**
+ * 输入 } 时，如果这一行 } 前面只有空白，就把它对齐到匹配的 { 的缩进。
+ * 返回 null 表示不需要调整。
+ */
+private fun alignClosingBrace(
+    text: String,
+    bracePos: Int,
+    cursorPos: Int
+): TextFieldValue? {
+    // 找这一行的起点
+    val lineStart = text.lastIndexOf('\n', bracePos - 1) + 1
+    if (lineStart < 0 || lineStart > bracePos) return null
+
+    // } 前面必须全是空白才处理（否则用户可能是在写别的东西）
+    val prefix = text.substring(lineStart, bracePos)
+    if (prefix.isNotEmpty() && !prefix.all { it == ' ' || it == '\t' }) return null
+
+    // 从 } 往前找匹配的 {
+    var depth = 0
+    var i = bracePos - 1
+    while (i >= 0) {
+        val ch = text[i]
+        when (ch) {
+            '}' -> depth++
+            '{' -> {
+                if (depth == 0) {
+                    // 找到匹配的 {
+                    val openLineStart = text.lastIndexOf('\n', i - 1) + 1
+                    val openLine = text.substring(openLineStart, i)
+                    val targetIndent = openLine.takeWhile { it == ' ' || it == '\t' }
+
+                    // 已经对齐就不动
+                    if (prefix == targetIndent) return null
+
+                    // 用 targetIndent 替换 prefix
+                    val before = text.substring(0, lineStart)
+                    val after = text.substring(bracePos)
+                    val updated = before + targetIndent + after
+
+                    // 光标偏移量
+                    val delta = prefix.length - targetIndent.length
+                    val newCursor = (cursorPos - delta).coerceAtLeast(0)
+                    return TextFieldValue(updated, TextRange(newCursor))
+                }
+                depth--
+            }
+        }
+        i--
+    }
+    return null
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -417,7 +566,6 @@ fun EditorScreen(
                     )
                     Spacer(Modifier.height(8.dp))
 
-                    // 用 Box 包裹整个区域，让空白长按的小菜单锚定在这里
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -430,7 +578,6 @@ fun EditorScreen(
                                 .combinedClickable(
                                     onClick = { },
                                     onLongClick = {
-                                        // 长按空白 → 项目根目录新建菜单（小菜单）
                                         newItemParentDir = null
                                         expandedMenuPath = null
                                         showFileTreeMenu = true
@@ -467,7 +614,6 @@ fun EditorScreen(
                             )
                         }
 
-                        // ── 空白长按的小菜单 ──
                         DropdownMenu(
                             expanded = showFileTreeMenu,
                             onDismissRequest = { showFileTreeMenu = false }
@@ -1133,26 +1279,6 @@ fun insertSymbol(value: TextFieldValue, symbol: String): TextFieldValue {
     return TextFieldValue(newText, TextRange(start + symbol.length))
 }
 
-fun handleEnter(value: TextFieldValue): TextFieldValue? {
-    val text = value.text
-    val start = value.selection.start
-    val end = value.selection.end
-
-    if (start != end) return null
-
-    if (start > 0 && start < text.length && text[start - 1] == '{' && text[start] == '}') {
-        val indent = "    "
-        val newText = text.substring(0, start) + "\n" + indent + "\n" + text.substring(start)
-        return TextFieldValue(newText, TextRange(start + 1 + indent.length))
-    }
-
-    val lineStart = text.lastIndexOf('\n', start - 1) + 1
-    val currentLine = text.substring(lineStart, start)
-    val indent = currentLine.takeWhile { it == ' ' || it == '\t' }
-    val newText = text.substring(0, start) + "\n" + indent + text.substring(start)
-    return TextFieldValue(newText, TextRange(start + 1 + indent.length))
-}
-
 @Composable
 fun TextMenuButton(text: String, onClick: () -> Unit) {
     Text(
@@ -1167,6 +1293,8 @@ fun TextMenuButton(text: String, onClick: () -> Unit) {
 
 /**
  * 代码编辑区
+ * 用 BoxWithConstraints 拿到 viewport 宽度，让 BasicTextField 至少和 viewport 一样宽，
+ * 这样即使文件为空，光标行高亮也能撑满整个屏幕，点击区域也覆盖全代码区。
  */
 @Composable
 fun CodeEditorWithLineNumbers(
@@ -1183,6 +1311,9 @@ fun CodeEditorWithLineNumbers(
 
     var textLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
     val focusRequester = remember { FocusRequester() }
+
+    val currentTextLayout = rememberUpdatedState(textLayout)
+    val currentValue = rememberUpdatedState(value)
 
     LaunchedEffect(focusRequestKey) {
         try {
@@ -1205,6 +1336,7 @@ fun CodeEditorWithLineNumbers(
             }
     ) {
         Row(modifier = Modifier.fillMaxSize()) {
+            // 行号列
             Column(
                 modifier = Modifier
                     .width(48.dp)
@@ -1225,116 +1357,111 @@ fun CodeEditorWithLineNumbers(
                 }
             }
 
-            Box(
+            // 代码区：BoxWithConstraints 拿到 viewport 宽度
+            BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
                     .verticalScroll(verticalScrollState)
-                    .horizontalScroll(horizontalScrollState)
-                    .padding(top = 8.dp, bottom = 8.dp)
             ) {
-                BasicTextField(
-                    value = value,
-                    onValueChange = onValueChange,
+                val viewportWidth = maxWidth
+
+                Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .focusRequester(focusRequester)
-                        .onPreviewKeyEvent { event ->
-                            if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
-                                val newValue = handleEnter(value)
-                                if (newValue != null) {
-                                    onValueChange(newValue)
-                                    return@onPreviewKeyEvent true
-                                }
-                            }
-                            false
-                        }
-                        .drawBehind {
-                            val layout = textLayout ?: return@drawBehind
+                        .horizontalScroll(horizontalScrollState)
+                        .padding(top = 8.dp, bottom = 8.dp)
+                ) {
+                    BasicTextField(
+                        value = value,
+                        onValueChange = { newValue ->
+                            val processed = applyAutoIndent(currentValue.value, newValue)
+                            onValueChange(processed)
+                        },
+                        modifier = Modifier
+                            .widthIn(min = viewportWidth)   // 👈 关键：至少和 viewport 一样宽
+                            .fillMaxHeight()
+                            .focusRequester(focusRequester)
+                            .drawBehind {
+                                val layout = textLayout ?: return@drawBehind
 
-                            val cursorOffset = value.selection.start.coerceIn(0, value.text.length)
-                            val cursorLine = layout.getLineForOffset(cursorOffset)
-                            val top = layout.getLineTop(cursorLine)
-                            val bottom = layout.getLineBottom(cursorLine)
-                            drawRect(
-                                color = cursorLineColor,
-                                topLeft = Offset(0f, top),
-                                size = Size(size.width, bottom - top)
-                            )
+                                val cursorOffset = value.selection.start.coerceIn(0, value.text.length)
+                                val cursorLine = layout.getLineForOffset(cursorOffset)
+                                val top = layout.getLineTop(cursorLine)
+                                val bottom = layout.getLineBottom(cursorLine)
+                                drawRect(
+                                    color = cursorLineColor,
+                                    topLeft = Offset(0f, top),
+                                    size = Size(size.width, bottom - top)
+                                )
 
-                            val text = value.text
-                            for (line in 0 until layout.lineCount) {
-                                val lineStart = layout.getLineStart(line)
-                                val lineEnd = layout.getLineEnd(line)
+                                val text = value.text
+                                for (line in 0 until layout.lineCount) {
+                                    val lineStart = layout.getLineStart(line)
+                                    val lineEnd = layout.getLineEnd(line)
 
-                                var spaces = 0
-                                var i = lineStart
-                                while (i < lineEnd && i < text.length) {
-                                    val ch = text[i]
-                                    if (ch == ' ') {
-                                        spaces++
-                                        i++
-                                    } else if (ch == '\t') {
-                                        spaces += 4
-                                        i++
-                                    } else {
-                                        break
+                                    var spaces = 0
+                                    var i = lineStart
+                                    while (i < lineEnd && i < text.length) {
+                                        val ch = text[i]
+                                        if (ch == ' ') {
+                                            spaces++
+                                            i++
+                                        } else if (ch == '\t') {
+                                            spaces += 4
+                                            i++
+                                        } else {
+                                            break
+                                        }
+                                    }
+                                    val indentLevel = spaces / 4
+                                    if (indentLevel == 0) continue
+
+                                    val lineTop = layout.getLineTop(line)
+                                    val lineBottom = layout.getLineBottom(line)
+
+                                    for (level in 1..indentLevel) {
+                                        val charOffset = lineStart + level * 4
+                                        if (charOffset > text.length) continue
+                                        val x = layout.getHorizontalPosition(charOffset, true)
+                                        drawLine(
+                                            color = guideColor,
+                                            start = Offset(x, lineTop),
+                                            end = Offset(x, lineBottom),
+                                            strokeWidth = 2f
+                                        )
                                     }
                                 }
-                                val indentLevel = spaces / 4
-                                if (indentLevel == 0) continue
-
-                                val lineTop = layout.getLineTop(line)
-                                val lineBottom = layout.getLineBottom(line)
-
-                                for (level in 1..indentLevel) {
-                                    val charOffset = lineStart + level * 4
-                                    if (charOffset > text.length) continue
-                                    val x = layout.getHorizontalPosition(charOffset, true)
-                                    drawLine(
-                                        color = guideColor,
-                                        start = Offset(x, lineTop),
-                                        end = Offset(x, lineBottom),
-                                        strokeWidth = 2f
-                                    )
-                                }
                             }
-                        }
-                        .pointerInput(textLayout) {
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val event = awaitPointerEvent()
-                                    if (event.type == PointerEventType.Press) {
-                                        val change = event.changes.firstOrNull() ?: continue
-                                        if (!change.changedToDown()) continue
-                                        val pos = change.position
-                                        val layout = textLayout
-                                        if (layout != null) {
-                                            val line = layout.getLineForVerticalPosition(pos.y)
-                                            val lineLeft = layout.getLineLeft(line)
-                                            val lineRight = layout.getLineRight(line)
-                                            val lineTop = layout.getLineTop(line)
-                                            val lineBottom = layout.getLineBottom(line)
-                                            val inTextBounds = pos.x in lineLeft..lineRight &&
-                                                               pos.y in lineTop..lineBottom
-                                            if (!inTextBounds) {
-                                                focusRequester.requestFocus()
-                                                change.consume()
-                                            }
+                            .pointerInput(Unit) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    val layout = currentTextLayout.value
+                                    if (layout != null) {
+                                        val pos = down.position
+                                        val line = layout.getLineForVerticalPosition(pos.y)
+                                        val lineLeft = layout.getLineLeft(line)
+                                        val lineRight = layout.getLineRight(line)
+                                        val lineTop = layout.getLineTop(line)
+                                        val lineBottom = layout.getLineBottom(line)
+                                        val inTextBounds = pos.x in lineLeft..lineRight &&
+                                                pos.y in lineTop..lineBottom
+                                        if (!inTextBounds) {
+                                            focusRequester.requestFocus()
+                                            down.consume()
                                         }
                                     }
                                 }
-                            }
-                        },
-                    onTextLayout = { textLayout = it },
-                    textStyle = TextStyle(
-                        color = Color(0xFFD4D4D4),
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = fontSize.sp,
-                        lineHeight = lineHeight.sp
-                    ),
-                    cursorBrush = SolidColor(Color(0xFF1A73E8))
-                )
+                            },
+                        onTextLayout = { textLayout = it },
+                        textStyle = TextStyle(
+                            color = Color(0xFFD4D4D4),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = fontSize.sp,
+                            lineHeight = lineHeight.sp
+                        ),
+                        cursorBrush = SolidColor(Color(0xFF1A73E8))
+                    )
+                }
             }
         }
     }
