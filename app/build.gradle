@@ -12,8 +12,8 @@ android {
         applicationId = "com.kitty.ide"
         minSdk = 24
         targetSdk = 34
-        versionCode = 22
-        versionName = "0.0.22"
+        versionCode = 21
+        versionName = "0.0.21"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
