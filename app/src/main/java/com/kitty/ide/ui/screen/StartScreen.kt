@@ -1,8 +1,10 @@
 package com.kitty.ide.ui.screen
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -13,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,11 +29,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -46,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,6 +59,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -72,6 +80,27 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
+/**
+ * 从 assets 加载 Kitty 表情图片
+ */
+private fun loadAssetBitmap(context: Context, name: String): ImageBitmap? {
+    return try {
+        context.assets.open(name).use { input ->
+            BitmapFactory.decodeStream(input)?.asImageBitmap()
+        }
+    } catch (e: Exception) {
+        null
+    }
+}
+
+/** 4 张 Kitty 图的文件名，顺序固定 */
+private val KITTY_FILES = listOf(
+    "kitty.png",          // 0 普通
+    "weary_kitty.png",    // 1 惊恐
+    "kissing_kitty.png",  // 2 亲亲
+    "happy_kitty.png"     // 3 开心
+)
+
 @Composable
 fun StartScreen(
     onOpenProject: (String) -> Unit,
@@ -86,7 +115,11 @@ fun StartScreen(
     var showPermissionDialog by remember { mutableStateOf(false) }
 
     // ── 猫咪彩蛋状态 ──
-    var kittyEmoji by remember { mutableStateOf("🐱") }
+    // 预加载 4 张图，避免每次重组都解码
+    val kittyBitmaps = remember {
+        KITTY_FILES.map { loadAssetBitmap(context, it) }
+    }
+    var kittyIndex by remember { mutableIntStateOf(0) }
     val kittyRotation = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
 
@@ -174,6 +207,7 @@ fun StartScreen(
         ) {
             Spacer(Modifier.height(80.dp))
 
+            // ── 猫咪头像（点击旋转彩蛋，用图片替换 emoji） ──
             Box(
                 modifier = Modifier
                     .size(96.dp)
@@ -187,7 +221,8 @@ fun StartScreen(
                             if (willChangeEmoji) {
                                 launch {
                                     delay(150)
-                                    kittyEmoji = listOf("🙀", "😾", "😽").random()
+                                    // 从 1~3 里随机选一个（0 是普通脸，不进随机池）
+                                    kittyIndex = Random.nextInt(1, 4)
                                 }
                             }
 
@@ -198,18 +233,30 @@ fun StartScreen(
 
                             if (willChangeEmoji) {
                                 delay(250)
-                                kittyEmoji = "🐱"
+                                kittyIndex = 0
                             }
                         }
                     }
                     .align(Alignment.CenterHorizontally),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = kittyEmoji,
-                    fontSize = 48.sp,
-                    modifier = Modifier.graphicsLayer { rotationZ = kittyRotation.value }
-                )
+                val bitmap = kittyBitmaps.getOrNull(kittyIndex)
+                if (bitmap != null) {
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = "Kitty",
+                        modifier = Modifier
+                            .size(64.dp)
+                            .graphicsLayer { rotationZ = kittyRotation.value }
+                    )
+                } else {
+                    // 兜底：图片缺失时退回 emoji
+                    Text(
+                        text = "🐱",
+                        fontSize = 48.sp,
+                        modifier = Modifier.graphicsLayer { rotationZ = kittyRotation.value }
+                    )
+                }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -278,8 +325,14 @@ fun StartScreen(
                             .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "📦", fontSize = 20.sp)
-                        Spacer(Modifier.size(12.dp))
+                        // 📦 → Icons.Outlined.Code
+                        Icon(
+                            imageVector = Icons.Outlined.Code,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
                         Column {
                             Text(
                                 text = info.meta.projectName,

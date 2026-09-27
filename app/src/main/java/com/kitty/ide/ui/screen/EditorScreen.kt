@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
@@ -35,11 +36,23 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.outlined.Brush
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DriveFileRenameOutline
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.InsertDriveFile
+import androidx.compose.material.icons.outlined.NoteAdd
+import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -68,6 +81,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -103,6 +117,15 @@ enum class NewItemType(val title: String, val defaultExt: String?, val hint: Str
     HTML("新建 HTML 文件", ".html", "输入文件名（自动补 .html）"),
     CSS("新建 CSS 文件", ".css", "输入文件名（自动补 .css）"),
     JS("新建 JS 文件", ".js", "输入文件名（自动补 .js）")
+}
+
+/** 返回每个新建类型对应的图标 */
+private fun iconForNewItem(type: NewItemType): ImageVector = when (type) {
+    NewItemType.FILE -> Icons.Outlined.NoteAdd
+    NewItemType.FOLDER -> Icons.Outlined.CreateNewFolder
+    NewItemType.HTML -> Icons.Outlined.Code
+    NewItemType.CSS -> Icons.Outlined.Brush
+    NewItemType.JS -> Icons.Outlined.Terminal
 }
 
 fun autoExpandChain(
@@ -177,7 +200,6 @@ fun EditorScreen(
     LaunchedEffect(activeIndex) {
         if (activeIndex in openFiles.indices) {
             val file = openFiles[activeIndex].file
-            // 打开文件时，光标放到最开头
             val value = TextFieldValue(
                 text = openFiles[activeIndex].content,
                 selection = TextRange(0)
@@ -731,11 +753,11 @@ fun EditorScreen(
 
 @Composable
 fun NewMenuOptions(onSelect: (NewItemType) -> Unit) {
-    MenuOption("📄 新建文件") { onSelect(NewItemType.FILE) }
-    MenuOption("📁 新建文件夹") { onSelect(NewItemType.FOLDER) }
-    MenuOption("🌐 新建 HTML 文件") { onSelect(NewItemType.HTML) }
-    MenuOption("🎨 新建 CSS 文件") { onSelect(NewItemType.CSS) }
-    MenuOption("⚙️ 新建 JS 文件") { onSelect(NewItemType.JS) }
+    MenuOption("新建文件", Icons.Outlined.NoteAdd) { onSelect(NewItemType.FILE) }
+    MenuOption("新建文件夹", Icons.Outlined.CreateNewFolder) { onSelect(NewItemType.FOLDER) }
+    MenuOption("新建 HTML 文件", Icons.Outlined.Code) { onSelect(NewItemType.HTML) }
+    MenuOption("新建 CSS 文件", Icons.Outlined.Brush) { onSelect(NewItemType.CSS) }
+    MenuOption("新建 JS 文件", Icons.Outlined.Terminal) { onSelect(NewItemType.JS) }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -784,16 +806,30 @@ fun FileTreeItem(
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (file.isDirectory) (if (isExpanded) "▼" else "▶") else "",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 10.sp,
-                    modifier = Modifier.width(16.dp)
+                // 展开箭头（仅目录显示）
+                if (file.isDirectory) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.ExpandMore
+                                      else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                } else {
+                    Spacer(Modifier.width(16.dp))
+                }
+
+                // 文件夹 / 文件 图标
+                Icon(
+                    imageVector = if (file.isDirectory) Icons.Outlined.Folder
+                                  else Icons.Outlined.InsertDriveFile,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(start = 2.dp, end = 8.dp)
+                        .size(16.dp)
                 )
-                Text(
-                    text = if (file.isDirectory) "📁" else "📄",
-                    modifier = Modifier.padding(end = 8.dp)
-                )
+
                 Text(
                     text = file.name,
                     style = MaterialTheme.typography.bodySmall,
@@ -807,48 +843,59 @@ fun FileTreeItem(
             ) {
                 if (file.isDirectory) {
                     DropdownMenuItem(
-                        text = { Text("📄 新建文件") },
+                        text = { Text("新建文件") },
+                        leadingIcon = { MenuIcon(Icons.Outlined.NoteAdd) },
                         onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.FILE) }
                     )
                     DropdownMenuItem(
-                        text = { Text("📁 新建文件夹") },
+                        text = { Text("新建文件夹") },
+                        leadingIcon = { MenuIcon(Icons.Outlined.CreateNewFolder) },
                         onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.FOLDER) }
                     )
                     DropdownMenuItem(
-                        text = { Text("🌐 新建 HTML 文件") },
+                        text = { Text("新建 HTML 文件") },
+                        leadingIcon = { MenuIcon(Icons.Outlined.Code) },
                         onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.HTML) }
                     )
                     DropdownMenuItem(
-                        text = { Text("🎨 新建 CSS 文件") },
+                        text = { Text("新建 CSS 文件") },
+                        leadingIcon = { MenuIcon(Icons.Outlined.Brush) },
                         onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.CSS) }
                     )
                     DropdownMenuItem(
-                        text = { Text("⚙️ 新建 JS 文件") },
+                        text = { Text("新建 JS 文件") },
+                        leadingIcon = { MenuIcon(Icons.Outlined.Terminal) },
                         onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.JS) }
                     )
                     DropdownMenuItem(
-                        text = { Text("✏️ 重命名") },
+                        text = { Text("重命名") },
+                        leadingIcon = { MenuIcon(Icons.Outlined.DriveFileRenameOutline) },
                         onClick = { onMenuToggle(null); onRename(file) }
                     )
                     DropdownMenuItem(
-                        text = { Text("📋 复制路径") },
+                        text = { Text("复制路径") },
+                        leadingIcon = { MenuIcon(Icons.Outlined.ContentCopy) },
                         onClick = { onMenuToggle(null); onCopyPath(file) }
                     )
                     DropdownMenuItem(
-                        text = { Text("🗑️ 删除") },
+                        text = { Text("删除") },
+                        leadingIcon = { MenuIcon(Icons.Outlined.Delete) },
                         onClick = { onMenuToggle(null); onDelete(file) }
                     )
                 } else {
                     DropdownMenuItem(
-                        text = { Text("✏️ 重命名") },
+                        text = { Text("重命名") },
+                        leadingIcon = { MenuIcon(Icons.Outlined.DriveFileRenameOutline) },
                         onClick = { onMenuToggle(null); onRename(file) }
                     )
                     DropdownMenuItem(
-                        text = { Text("📋 复制路径") },
+                        text = { Text("复制路径") },
+                        leadingIcon = { MenuIcon(Icons.Outlined.ContentCopy) },
                         onClick = { onMenuToggle(null); onCopyPath(file) }
                     )
                     DropdownMenuItem(
-                        text = { Text("🗑️ 删除") },
+                        text = { Text("删除") },
+                        leadingIcon = { MenuIcon(Icons.Outlined.Delete) },
                         onClick = { onMenuToggle(null); onDelete(file) }
                     )
                 }
@@ -887,17 +934,45 @@ fun FileTreeItem(
     }
 }
 
+/** 菜单项的统一图标样式（20dp） */
 @Composable
-fun MenuOption(text: String, onClick: () -> Unit) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurface,
+private fun MenuIcon(icon: ImageVector) {
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(20.dp)
+    )
+}
+
+@Composable
+fun MenuOption(
+    text: String,
+    icon: ImageVector? = null,
+    onClick: () -> Unit
+) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp, horizontal = 4.dp)
-    )
+            .padding(vertical = 12.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+        }
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
 }
 
 @Composable
@@ -1057,13 +1132,7 @@ fun TextMenuButton(text: String, onClick: () -> Unit) {
 }
 
 /**
- * 代码编辑区：
- * - 行号列（左侧）
- * - 缩进引导线（每行每层级一根竖线）
- * - 光标行高亮
- * - 打开文件时自动聚焦、光标置于开头
- * - 点击文字区域：光标跳到点击位置（BasicTextField 默认行为）
- * - 点击文字外空白：只聚焦，光标不跳
+ * 代码编辑区（保持不变）
  */
 @Composable
 fun CodeEditorWithLineNumbers(
@@ -1078,20 +1147,16 @@ fun CodeEditorWithLineNumbers(
     var fontSize by remember { mutableFloatStateOf(15f) }
     val lineHeight = fontSize * 1.5f
 
-    // 缓存 TextLayoutResult 用于绘制
     var textLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
     val focusRequester = remember { FocusRequester() }
 
-    // focusRequestKey 变化时自动聚焦（打开文件 / 切换标签）
     LaunchedEffect(focusRequestKey) {
         try {
             focusRequester.requestFocus()
         } catch (e: Exception) {
-            // 忽略：还没挂载完成时会抛异常
         }
     }
 
-    // 光标行高亮色 & 缩进引导线色
     val cursorLineColor = Color(0x14FFFFFF)
     val guideColor = Color(0x2AFFFFFF)
 
@@ -1106,7 +1171,6 @@ fun CodeEditorWithLineNumbers(
             }
     ) {
         Row(modifier = Modifier.fillMaxSize()) {
-            // ── 行号 ──
             Column(
                 modifier = Modifier
                     .width(48.dp)
@@ -1127,7 +1191,6 @@ fun CodeEditorWithLineNumbers(
                 }
             }
 
-            // ── 代码区 ──
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -1155,7 +1218,6 @@ fun CodeEditorWithLineNumbers(
                         .drawBehind {
                             val layout = textLayout ?: return@drawBehind
 
-                            // ① 光标行高亮
                             val cursorOffset = value.selection.start.coerceIn(0, value.text.length)
                             val cursorLine = layout.getLineForOffset(cursorOffset)
                             val top = layout.getLineTop(cursorLine)
@@ -1166,13 +1228,11 @@ fun CodeEditorWithLineNumbers(
                                 size = Size(size.width, bottom - top)
                             )
 
-                            // ② 缩进引导线
                             val text = value.text
                             for (line in 0 until layout.lineCount) {
                                 val lineStart = layout.getLineStart(line)
                                 val lineEnd = layout.getLineEnd(line)
 
-                                // 计算这一行的缩进空格数
                                 var spaces = 0
                                 var i = lineStart
                                 while (i < lineEnd && i < text.length) {
@@ -1224,7 +1284,6 @@ fun CodeEditorWithLineNumbers(
                                             val inTextBounds = pos.x in lineLeft..lineRight &&
                                                                pos.y in lineTop..lineBottom
                                             if (!inTextBounds) {
-                                                // 点击文字外空白：只聚焦，光标不跳
                                                 focusRequester.requestFocus()
                                                 change.consume()
                                             }
@@ -1240,7 +1299,7 @@ fun CodeEditorWithLineNumbers(
                         fontSize = fontSize.sp,
                         lineHeight = lineHeight.sp
                     ),
-                    cursorBrush = SolidColor(Color(0xFF007ACC))
+                    cursorBrush = SolidColor(Color(0xFF1A73E8))
                 )
             }
         }
