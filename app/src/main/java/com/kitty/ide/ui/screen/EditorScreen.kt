@@ -79,6 +79,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -1357,17 +1358,73 @@ fun CodeEditorWithLineNumbers(
                 }
             }
 
-            // 代码区：BoxWithConstraints 拿到 viewport 宽度
+            // 代码区：用 BoxWithConstraints 拿到 viewport 尺寸，供自动滚动使用
             BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .verticalScroll(verticalScrollState)
             ) {
-                val viewportWidth = maxWidth
+                val viewportWidthPx = constraints.maxWidth.toFloat()
+                val viewportHeightPx = constraints.maxHeight.toFloat()
+
+                // ── 光标自动滚动到可见区域 ──
+                LaunchedEffect(value.selection.start, textLayout) {
+                    val layout = textLayout ?: return@LaunchedEffect
+                    if (viewportWidthPx <= 0f || viewportHeightPx <= 0f) return@LaunchedEffect
+
+                    val cursorOffset = value.selection.start.coerceIn(0, value.text.length)
+                    val cursorRect = layout.getCursorRect(cursorOffset)
+
+                    // 光标在文本坐标系中的位置（顶部 / 底部 / 左右）
+                    val cursorLeft = cursorRect.left
+                    val cursorRight = cursorRect.right
+                    val cursorTop = cursorRect.top
+                    val cursorBottom = cursorRect.bottom
+
+                    // 当前可见区域
+                    val visibleLeft = horizontalScrollState.value.toFloat()
+                    val visibleRight = visibleLeft + viewportWidthPx
+                    val visibleTop = verticalScrollState.value.toFloat()
+                    val visibleBottom = visibleTop + viewportHeightPx
+
+                    // 留点边距，别让光标贴边
+                    val marginPx = 24f
+
+                    // ── 水平方向 ──
+                    if (cursorRight > visibleRight - marginPx) {
+                        // 光标超出右边界 → 向右滚
+                        val target = (cursorRight - viewportWidthPx + marginPx)
+                            .toInt()
+                            .coerceAtLeast(0)
+                        horizontalScrollState.scrollTo(target)
+                    } else if (cursorLeft < visibleLeft + marginPx) {
+                        // 光标超出左边界 → 向左滚
+                        val target = (cursorLeft - marginPx)
+                            .toInt()
+                            .coerceAtLeast(0)
+                        horizontalScrollState.scrollTo(target)
+                    }
+
+                    // ── 垂直方向 ──
+                    if (cursorBottom > visibleBottom - marginPx) {
+                        // 光标超出下边界 → 向下滚
+                        val target = (cursorBottom - viewportHeightPx + marginPx)
+                            .toInt()
+                            .coerceAtLeast(0)
+                        verticalScrollState.scrollTo(target)
+                    } else if (cursorTop < visibleTop + marginPx) {
+                        // 光标超出上边界 → 向上滚
+                        val target = (cursorTop - marginPx)
+                            .toInt()
+                            .coerceAtLeast(0)
+                        verticalScrollState.scrollTo(target)
+                    }
+                }
 
                 Box(
                     modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(verticalScrollState)
                         .horizontalScroll(horizontalScrollState)
                         .padding(top = 8.dp, bottom = 8.dp)
                 ) {
@@ -1378,7 +1435,9 @@ fun CodeEditorWithLineNumbers(
                             onValueChange(processed)
                         },
                         modifier = Modifier
-                            .widthIn(min = viewportWidth)   // 👈 关键：至少和 viewport 一样宽
+                            .widthIn(min = with(androidx.compose.ui.platform.LocalDensity.current) {
+                                viewportWidthPx.toDp()
+                            })
                             .fillMaxHeight()
                             .focusRequester(focusRequester)
                             .drawBehind {
