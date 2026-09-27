@@ -417,47 +417,107 @@ fun EditorScreen(
                     )
                     Spacer(Modifier.height(8.dp))
 
-                    Column(
+                    // 用 Box 包裹整个区域，让空白长按的小菜单锚定在这里
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
-                            .verticalScroll(rememberScrollState())
-                            .combinedClickable(
-                                onClick = { },
-                                onLongClick = {
-                                    newItemParentDir = null
-                                    showFileTreeMenu = true
-                                }
-                            )
                     ) {
-                        projectFiles.forEach { file ->
-                            FileTreeItem(
-                                file = file,
-                                depth = 0,
-                                expandedMap = expandedMap,
-                                version = fileTreeVersion,
-                                expandedMenuPath = expandedMenuPath,
-                                onMenuToggle = { expandedMenuPath = it },
-                                onFileClick = { f ->
-                                    if (f.fileType == FileType.TEXT) {
-                                        viewModel.openFile(f.file)
-                                    } else {
-                                        Toast.makeText(context, "暂不支持预览此格式", Toast.LENGTH_SHORT).show()
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .combinedClickable(
+                                    onClick = { },
+                                    onLongClick = {
+                                        // 长按空白 → 项目根目录新建菜单（小菜单）
+                                        newItemParentDir = null
+                                        expandedMenuPath = null
+                                        showFileTreeMenu = true
                                     }
-                                },
-                                onNewItem = { parent, type -> handleNewItem(parent, type) },
-                                onRename = { handleRename(it) },
-                                onCopyPath = { handleCopyPath(it) },
-                                onDelete = { handleDelete(it) },
-                                viewModel = viewModel
+                                )
+                        ) {
+                            projectFiles.forEach { file ->
+                                FileTreeItem(
+                                    file = file,
+                                    depth = 0,
+                                    expandedMap = expandedMap,
+                                    version = fileTreeVersion,
+                                    expandedMenuPath = expandedMenuPath,
+                                    onMenuToggle = { expandedMenuPath = it },
+                                    onFileClick = { f ->
+                                        if (f.fileType == FileType.TEXT) {
+                                            viewModel.openFile(f.file)
+                                        } else {
+                                            Toast.makeText(context, "暂不支持预览此格式", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    onNewItem = { parent, type -> handleNewItem(parent, type) },
+                                    onRename = { handleRename(it) },
+                                    onCopyPath = { handleCopyPath(it) },
+                                    onDelete = { handleDelete(it) },
+                                    viewModel = viewModel
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp)
                             )
                         }
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp)
-                        )
+                        // ── 空白长按的小菜单 ──
+                        DropdownMenu(
+                            expanded = showFileTreeMenu,
+                            onDismissRequest = { showFileTreeMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("新建文件") },
+                                leadingIcon = { MenuIcon(Icons.Outlined.NoteAdd) },
+                                onClick = {
+                                    showFileTreeMenu = false
+                                    val dir = projectDir ?: return@DropdownMenuItem
+                                    handleNewItem(dir, NewItemType.FILE)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("新建文件夹") },
+                                leadingIcon = { MenuIcon(Icons.Outlined.CreateNewFolder) },
+                                onClick = {
+                                    showFileTreeMenu = false
+                                    val dir = projectDir ?: return@DropdownMenuItem
+                                    handleNewItem(dir, NewItemType.FOLDER)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("新建 HTML 文件") },
+                                leadingIcon = { MenuIcon(Icons.Outlined.Code) },
+                                onClick = {
+                                    showFileTreeMenu = false
+                                    val dir = projectDir ?: return@DropdownMenuItem
+                                    handleNewItem(dir, NewItemType.HTML)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("新建 CSS 文件") },
+                                leadingIcon = { MenuIcon(Icons.Outlined.Brush) },
+                                onClick = {
+                                    showFileTreeMenu = false
+                                    val dir = projectDir ?: return@DropdownMenuItem
+                                    handleNewItem(dir, NewItemType.CSS)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("新建 JS 文件") },
+                                leadingIcon = { MenuIcon(Icons.Outlined.Terminal) },
+                                onClick = {
+                                    showFileTreeMenu = false
+                                    val dir = projectDir ?: return@DropdownMenuItem
+                                    handleNewItem(dir, NewItemType.JS)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -537,30 +597,6 @@ fun EditorScreen(
     // ═════════════════════════════════════════
     // 对话框们
     // ═════════════════════════════════════════
-
-    if (showFileTreeMenu) {
-        AlertDialog(
-            onDismissRequest = { showFileTreeMenu = false },
-            title = { Text("在「项目根目录」中新建") },
-            text = {
-                Column {
-                    NewMenuOptions(
-                        onSelect = { type ->
-                            newItemType = type
-                            newItemName = ""
-                            newItemNameError = null
-                            newItemParentDir = null
-                            showNewItemDialog = true
-                            showFileTreeMenu = false
-                        }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showFileTreeMenu = false }) { Text("取消") }
-            }
-        )
-    }
 
     if (showNewItemDialog) {
         AlertDialog(
@@ -806,7 +842,6 @@ fun FileTreeItem(
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 展开箭头（仅目录显示）
                 if (file.isDirectory) {
                     Icon(
                         imageVector = if (isExpanded) Icons.Default.ExpandMore
@@ -819,7 +854,6 @@ fun FileTreeItem(
                     Spacer(Modifier.width(16.dp))
                 }
 
-                // 文件夹 / 文件 图标
                 Icon(
                     imageVector = if (file.isDirectory) Icons.Outlined.Folder
                                   else Icons.Outlined.InsertDriveFile,
@@ -1132,7 +1166,7 @@ fun TextMenuButton(text: String, onClick: () -> Unit) {
 }
 
 /**
- * 代码编辑区（保持不变）
+ * 代码编辑区
  */
 @Composable
 fun CodeEditorWithLineNumbers(
