@@ -11,4 +11,11 @@ class SettingsRepository(context: Context) {
     fun setThemeMode(mode: String) {
         prefs.edit().putString("theme_mode", mode).apply()
     }
+
+    /** 代码字体：JetBrainsMonoNL / RobotoMono */
+    fun getCodeFont(): String = prefs.getString("code_font", "JetBrainsMonoNL") ?: "JetBrainsMonoNL"
+
+    fun setCodeFont(key: String) {
+        prefs.edit().putString("code_font", key).apply()
+    }
 }

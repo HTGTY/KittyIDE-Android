@@ -79,7 +79,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -91,6 +90,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
@@ -105,6 +105,7 @@ import com.kitty.ide.data.model.FileType
 import com.kitty.ide.data.model.ProjectFile
 import com.kitty.ide.data.terminal.TerminalManager
 import com.kitty.ide.ui.component.TerminalPanel
+import com.kitty.ide.ui.theme.rememberCodeFontFamily
 import com.kitty.ide.ui.viewmodel.EditorViewModel
 import com.kitty.ide.util.NameValidator
 import java.io.File
@@ -156,7 +157,6 @@ private fun applyAutoIndent(old: TextFieldValue, new: TextFieldValue): TextField
     val oldText = old.text
     val newText = new.text
 
-    // 只处理"长度 +1"的单字符插入
     if (newText.length != oldText.length + 1) return new
 
     val cursor = new.selection.start
@@ -172,7 +172,6 @@ private fun applyAutoIndent(old: TextFieldValue, new: TextFieldValue): TextField
         if (aligned != null) return aligned
     }
 
-    // 后续逻辑只处理换行
     if (insertedChar != '\n') return new
 
     val newlinePos = insertedPos
@@ -181,7 +180,6 @@ private fun applyAutoIndent(old: TextFieldValue, new: TextFieldValue): TextField
 
     val unit = "    "
 
-    // 计算某个位置所在行的前导缩进
     fun computeCurrentIndent(pos: Int): String {
         val lineStart = newText.lastIndexOf('\n', pos - 1) + 1
         if (lineStart < 0 || lineStart > pos) return ""
@@ -253,15 +251,12 @@ private fun alignClosingBrace(
     bracePos: Int,
     cursorPos: Int
 ): TextFieldValue? {
-    // 找这一行的起点
     val lineStart = text.lastIndexOf('\n', bracePos - 1) + 1
     if (lineStart < 0 || lineStart > bracePos) return null
 
-    // } 前面必须全是空白才处理（否则用户可能是在写别的东西）
     val prefix = text.substring(lineStart, bracePos)
     if (prefix.isNotEmpty() && !prefix.all { it == ' ' || it == '\t' }) return null
 
-    // 从 } 往前找匹配的 {
     var depth = 0
     var i = bracePos - 1
     while (i >= 0) {
@@ -270,20 +265,16 @@ private fun alignClosingBrace(
             '}' -> depth++
             '{' -> {
                 if (depth == 0) {
-                    // 找到匹配的 {
                     val openLineStart = text.lastIndexOf('\n', i - 1) + 1
                     val openLine = text.substring(openLineStart, i)
                     val targetIndent = openLine.takeWhile { it == ' ' || it == '\t' }
 
-                    // 已经对齐就不动
                     if (prefix == targetIndent) return null
 
-                    // 用 targetIndent 替换 prefix
                     val before = text.substring(0, lineStart)
                     val after = text.substring(bracePos)
                     val updated = before + targetIndent + after
 
-                    // 光标偏移量
                     val delta = prefix.length - targetIndent.length
                     val newCursor = (cursorPos - delta).coerceAtLeast(0)
                     return TextFieldValue(updated, TextRange(newCursor))
@@ -312,6 +303,9 @@ fun EditorScreen(
     val openFiles by viewModel.openFiles.collectAsState()
     val activeIndex by viewModel.activeFileIndex.collectAsState()
     val projectDir by viewModel.projectDir.collectAsState()
+
+    // ── 当前选中的代码字体 ──
+    val codeFont = rememberCodeFontFamily()
 
     var isDrawerOpen by remember { mutableStateOf(false) }
     val drawerWidth by animateDpAsState(
@@ -682,6 +676,7 @@ fun EditorScreen(
                         }
                     },
                     focusRequestKey = activeIndex,
+                    codeFont = codeFont,
                     modifier = Modifier.weight(1f).fillMaxHeight()
                 )
             } else {
@@ -1294,14 +1289,15 @@ fun TextMenuButton(text: String, onClick: () -> Unit) {
 
 /**
  * 代码编辑区
- * 用 BoxWithConstraints 拿到 viewport 宽度，让 BasicTextField 至少和 viewport 一样宽，
- * 这样即使文件为空，光标行高亮也能撑满整个屏幕，点击区域也覆盖全代码区。
+ * - 用 BoxWithConstraints 拿到 viewport 宽度，让 BasicTextField 至少和 viewport 一样宽
+ * - 字体由外部通过 codeFont 参数注入，支持在设置中动态切换
  */
 @Composable
 fun CodeEditorWithLineNumbers(
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,
     focusRequestKey: Any? = null,
+    codeFont: FontFamily = FontFamily.Monospace,
     modifier: Modifier = Modifier
 ) {
     val verticalScrollState = rememberScrollState()
@@ -1350,7 +1346,7 @@ fun CodeEditorWithLineNumbers(
                     Text(
                         text = i.toString(),
                         color = Color(0xFF858585),
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = codeFont,
                         fontSize = fontSize.sp,
                         lineHeight = lineHeight.sp,
                         modifier = Modifier.padding(end = 8.dp)
@@ -1358,7 +1354,7 @@ fun CodeEditorWithLineNumbers(
                 }
             }
 
-            // 代码区：用 BoxWithConstraints 拿到 viewport 尺寸，供自动滚动使用
+            // 代码区
             BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
@@ -1375,48 +1371,35 @@ fun CodeEditorWithLineNumbers(
                     val cursorOffset = value.selection.start.coerceIn(0, value.text.length)
                     val cursorRect = layout.getCursorRect(cursorOffset)
 
-                    // 光标在文本坐标系中的位置（顶部 / 底部 / 左右）
                     val cursorLeft = cursorRect.left
                     val cursorRight = cursorRect.right
                     val cursorTop = cursorRect.top
                     val cursorBottom = cursorRect.bottom
 
-                    // 当前可见区域
                     val visibleLeft = horizontalScrollState.value.toFloat()
                     val visibleRight = visibleLeft + viewportWidthPx
                     val visibleTop = verticalScrollState.value.toFloat()
                     val visibleBottom = visibleTop + viewportHeightPx
 
-                    // 留点边距，别让光标贴边
                     val marginPx = 24f
 
-                    // ── 水平方向 ──
                     if (cursorRight > visibleRight - marginPx) {
-                        // 光标超出右边界 → 向右滚
                         val target = (cursorRight - viewportWidthPx + marginPx)
-                            .toInt()
-                            .coerceAtLeast(0)
+                            .toInt().coerceAtLeast(0)
                         horizontalScrollState.scrollTo(target)
                     } else if (cursorLeft < visibleLeft + marginPx) {
-                        // 光标超出左边界 → 向左滚
                         val target = (cursorLeft - marginPx)
-                            .toInt()
-                            .coerceAtLeast(0)
+                            .toInt().coerceAtLeast(0)
                         horizontalScrollState.scrollTo(target)
                     }
 
-                    // ── 垂直方向 ──
                     if (cursorBottom > visibleBottom - marginPx) {
-                        // 光标超出下边界 → 向下滚
                         val target = (cursorBottom - viewportHeightPx + marginPx)
-                            .toInt()
-                            .coerceAtLeast(0)
+                            .toInt().coerceAtLeast(0)
                         verticalScrollState.scrollTo(target)
                     } else if (cursorTop < visibleTop + marginPx) {
-                        // 光标超出上边界 → 向上滚
                         val target = (cursorTop - marginPx)
-                            .toInt()
-                            .coerceAtLeast(0)
+                            .toInt().coerceAtLeast(0)
                         verticalScrollState.scrollTo(target)
                     }
                 }
@@ -1435,7 +1418,7 @@ fun CodeEditorWithLineNumbers(
                             onValueChange(processed)
                         },
                         modifier = Modifier
-                            .widthIn(min = with(androidx.compose.ui.platform.LocalDensity.current) {
+                            .widthIn(min = with(LocalDensity.current) {
                                 viewportWidthPx.toDp()
                             })
                             .fillMaxHeight()
@@ -1514,7 +1497,7 @@ fun CodeEditorWithLineNumbers(
                         onTextLayout = { textLayout = it },
                         textStyle = TextStyle(
                             color = Color(0xFFD4D4D4),
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = codeFont,
                             fontSize = fontSize.sp,
                             lineHeight = lineHeight.sp
                         ),

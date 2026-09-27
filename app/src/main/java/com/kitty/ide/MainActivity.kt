@@ -11,6 +11,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.kitty.ide.ui.navigation.KittyNavHost
+import com.kitty.ide.ui.theme.FontManager
 import com.kitty.ide.ui.theme.KittyIDETheme
 import com.kitty.ide.ui.theme.ThemeManager
 
@@ -19,6 +20,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         ThemeManager.init(this)
+        FontManager.init(this)
         setContent {
             val mode by ThemeManager.themeMode
             val darkTheme = when (mode) {

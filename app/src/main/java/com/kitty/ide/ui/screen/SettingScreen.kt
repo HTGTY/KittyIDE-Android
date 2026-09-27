@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kitty.ide.AppInfo
+import com.kitty.ide.ui.theme.FontManager
 import com.kitty.ide.ui.theme.ThemeManager
 
 @Composable
@@ -46,9 +47,11 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val mode by ThemeManager.themeMode
+    val fontKey by FontManager.fontKey
 
     var showAboutDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showFontDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -100,6 +103,13 @@ fun SettingsScreen(
                 title = "显示设置",
                 subtitle = "模式切换 · 当前：${ThemeManager.labelOf(mode)}",
                 onClick = { showThemeDialog = true }
+            )
+
+            // 卡片 3：编辑器字体
+            SettingsCard(
+                title = "编辑器字体",
+                subtitle = "当前：${FontManager.labelOf(fontKey)}",
+                onClick = { showFontDialog = true }
             )
 
             Spacer(Modifier.height(16.dp))
@@ -185,6 +195,42 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showThemeDialog = false }) { Text("完成") }
+            }
+        )
+    }
+
+    // ── 编辑器字体选择弹窗 ──
+    if (showFontDialog) {
+        AlertDialog(
+            onDismissRequest = { showFontDialog = false },
+            title = { Text("编辑器字体") },
+            text = {
+                Column {
+                    FontManager.available.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    FontManager.setFont(context, option.key)
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = fontKey == option.key,
+                                onClick = { FontManager.setFont(context, option.key) }
+                            )
+                            Text(
+                                text = option.label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showFontDialog = false }) { Text("完成") }
             }
         )
     }
