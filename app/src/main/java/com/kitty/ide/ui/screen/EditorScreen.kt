@@ -97,14 +97,18 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kitty.ide.data.editor.UndoManager
 import com.kitty.ide.data.model.FileType
 import com.kitty.ide.data.model.ProjectFile
+import com.kitty.ide.data.syntax.LanguageRegistry
 import com.kitty.ide.data.terminal.TerminalManager
 import com.kitty.ide.ui.component.TerminalPanel
+import com.kitty.ide.ui.syntax.SyntaxHighlightTransformation
+import com.kitty.ide.ui.theme.ThemeManager
 import com.kitty.ide.ui.theme.rememberCodeFontFamily
 import com.kitty.ide.ui.viewmodel.EditorViewModel
 import com.kitty.ide.util.NameValidator
@@ -147,11 +151,7 @@ fun autoExpandChain(
 }
 
 /**
- * 回车自动缩进：
- * - 在 {} 之间回车 → 展开成三行，中间一层缩进，末行不缩进
- * - 在 <> 之间回车 → 同上
- * - 在单个 { 或 < 之后回车 → 只补一层缩进
- * - 普通换行 → 继承上一行的缩进
+ * 回车自动缩进
  */
 private fun applyAutoIndent(old: TextFieldValue, new: TextFieldValue): TextFieldValue {
     val oldText = old.text
@@ -166,7 +166,6 @@ private fun applyAutoIndent(old: TextFieldValue, new: TextFieldValue): TextField
     if (insertedPos < 0 || insertedPos >= newText.length) return new
     val insertedChar = newText[insertedPos]
 
-    // ── 特殊：用户输入 } 时，自动对齐到匹配的 { 的缩进 ──
     if (insertedChar == '}') {
         val aligned = alignClosingBrace(newText, insertedPos, cursor)
         if (aligned != null) return aligned
@@ -187,45 +186,35 @@ private fun applyAutoIndent(old: TextFieldValue, new: TextFieldValue): TextField
         return line.takeWhile { it == ' ' || it == '\t' }
     }
 
-    // 场景 1：在 {} 之间回车 → 展开成三行
     if (charBefore == '{' && charAfter == '}') {
         val currentIndent = computeCurrentIndent(newlinePos - 1)
         val innerIndent = currentIndent + unit
-
         val updated = newText.substring(0, newlinePos + 1) +
                 innerIndent + "\n" +
                 currentIndent +
                 newText.substring(newlinePos + 1)
-        val newCursor = newlinePos + 1 + innerIndent.length
-        return TextFieldValue(updated, TextRange(newCursor))
+        return TextFieldValue(updated, TextRange(newlinePos + 1 + innerIndent.length))
     }
 
-    // 场景 2：在 <> 之间回车
     if (charBefore == '<' && charAfter == '>') {
         val currentIndent = computeCurrentIndent(newlinePos - 1)
         val innerIndent = currentIndent + unit
-
         val updated = newText.substring(0, newlinePos + 1) +
                 innerIndent + "\n" +
                 currentIndent +
                 newText.substring(newlinePos + 1)
-        val newCursor = newlinePos + 1 + innerIndent.length
-        return TextFieldValue(updated, TextRange(newCursor))
+        return TextFieldValue(updated, TextRange(newlinePos + 1 + innerIndent.length))
     }
 
-    // 场景 3：在单个 { 或 < 之后回车，下一行缩进 = 父缩进 + 4
     if (charBefore == '{' || charBefore == '<') {
         val currentIndent = computeCurrentIndent(newlinePos - 1)
         val innerIndent = currentIndent + unit
-
         val updated = newText.substring(0, newlinePos + 1) +
                 innerIndent +
                 newText.substring(newlinePos + 1)
-        val newCursor = newlinePos + 1 + innerIndent.length
-        return TextFieldValue(updated, TextRange(newCursor))
+        return TextFieldValue(updated, TextRange(newlinePos + 1 + innerIndent.length))
     }
 
-    // 场景 4：继承上一行的缩进
     val lineStart = newText.lastIndexOf('\n', newlinePos - 1) + 1
     if (lineStart in 0 until newlinePos) {
         val currentLine = newText.substring(lineStart, newlinePos)
@@ -234,8 +223,7 @@ private fun applyAutoIndent(old: TextFieldValue, new: TextFieldValue): TextField
             val updated = newText.substring(0, newlinePos + 1) +
                     leadingIndent +
                     newText.substring(newlinePos + 1)
-            val newCursor = newlinePos + 1 + leadingIndent.length
-            return TextFieldValue(updated, TextRange(newCursor))
+            return TextFieldValue(updated, TextRange(newlinePos + 1 + leadingIndent.length))
         }
     }
 
@@ -243,8 +231,7 @@ private fun applyAutoIndent(old: TextFieldValue, new: TextFieldValue): TextField
 }
 
 /**
- * 输入 } 时，如果这一行 } 前面只有空白，就把它对齐到匹配的 { 的缩进。
- * 返回 null 表示不需要调整。
+ * 输入 } 时，自动对齐到匹配的 { 的缩进
  */
 private fun alignClosingBrace(
     text: String,
@@ -306,6 +293,23 @@ fun EditorScreen(
 
     // ── 当前选中的代码字体 ──
     val codeFont = rememberCodeFontFamily()
+
+    // ── 当前是否深色主题 ──
+    val themeMode by ThemeManager.themeMode
+    val darkTheme = when (themeMode) {
+        "Light" -> false
+        "Dark" -> true
+        else -> androidx.compose.foundation.isSystemInDarkTheme()
+    }
+
+    // ── 当前激活文件 → 语言规则 → 高亮变换器 ──
+    val activeFileName: String? = if (activeIndex in openFiles.indices) {
+        openFiles[activeIndex].file.name
+    } else null
+    val activeLanguage = activeFileName?.let { LanguageRegistry.forFileName(it) }
+    val highlightTransformation = remember(activeLanguage, darkTheme) {
+        SyntaxHighlightTransformation(activeLanguage, darkTheme)
+    }
 
     var isDrawerOpen by remember { mutableStateOf(false) }
     val drawerWidth by animateDpAsState(
@@ -677,6 +681,8 @@ fun EditorScreen(
                     },
                     focusRequestKey = activeIndex,
                     codeFont = codeFont,
+                    visualTransformation = highlightTransformation,
+                    darkTheme = darkTheme,       // 👈 新增
                     modifier = Modifier.weight(1f).fillMaxHeight()
                 )
             } else {
@@ -1289,8 +1295,7 @@ fun TextMenuButton(text: String, onClick: () -> Unit) {
 
 /**
  * 代码编辑区
- * - 用 BoxWithConstraints 拿到 viewport 宽度，让 BasicTextField 至少和 viewport 一样宽
- * - 字体由外部通过 codeFont 参数注入，支持在设置中动态切换
+ * - 背景、文字、行号、光标行、引导线都根据 darkTheme 动态切换
  */
 @Composable
 fun CodeEditorWithLineNumbers(
@@ -1298,6 +1303,8 @@ fun CodeEditorWithLineNumbers(
     onValueChange: (TextFieldValue) -> Unit,
     focusRequestKey: Any? = null,
     codeFont: FontFamily = FontFamily.Monospace,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    darkTheme: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val verticalScrollState = rememberScrollState()
@@ -1319,13 +1326,18 @@ fun CodeEditorWithLineNumbers(
         }
     }
 
-    val cursorLineColor = Color(0x14FFFFFF)
-    val guideColor = Color(0x2AFFFFFF)
+    // ── 主题色 ──
+    val editorBg     = if (darkTheme) Color(0xFF1E1E1E) else Color(0xFFFFFFFF)
+    val defaultText  = if (darkTheme) Color(0xFFD4D4D4) else Color(0xFF333333)
+    val lineNumColor = if (darkTheme) Color(0xFF858585) else Color(0xFF9E9E9E)
+    val cursorLineColor = if (darkTheme) Color(0x14FFFFFF) else Color(0x14000000)
+    val guideColor      = if (darkTheme) Color(0x2AFFFFFF) else Color(0x2A000000)
+    val cursorColor     = Color(0xFF1A73E8)
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF1E1E1E))
+            .background(editorBg)
             .pointerInput(Unit) {
                 detectTransformGestures { _, _, zoom, _ ->
                     fontSize = (fontSize * zoom).coerceIn(10f, 30f)
@@ -1345,7 +1357,7 @@ fun CodeEditorWithLineNumbers(
                 for (i in 1..lineCount) {
                     Text(
                         text = i.toString(),
-                        color = Color(0xFF858585),
+                        color = lineNumColor,
                         fontFamily = codeFont,
                         fontSize = fontSize.sp,
                         lineHeight = lineHeight.sp,
@@ -1363,18 +1375,13 @@ fun CodeEditorWithLineNumbers(
                 val viewportWidthPx = constraints.maxWidth.toFloat()
                 val viewportHeightPx = constraints.maxHeight.toFloat()
 
-                // ── 光标自动滚动到可见区域 ──
+                // ── 光标自动滚动 ──
                 LaunchedEffect(value.selection.start, textLayout) {
                     val layout = textLayout ?: return@LaunchedEffect
                     if (viewportWidthPx <= 0f || viewportHeightPx <= 0f) return@LaunchedEffect
 
                     val cursorOffset = value.selection.start.coerceIn(0, value.text.length)
                     val cursorRect = layout.getCursorRect(cursorOffset)
-
-                    val cursorLeft = cursorRect.left
-                    val cursorRight = cursorRect.right
-                    val cursorTop = cursorRect.top
-                    val cursorBottom = cursorRect.bottom
 
                     val visibleLeft = horizontalScrollState.value.toFloat()
                     val visibleRight = visibleLeft + viewportWidthPx
@@ -1383,24 +1390,24 @@ fun CodeEditorWithLineNumbers(
 
                     val marginPx = 24f
 
-                    if (cursorRight > visibleRight - marginPx) {
-                        val target = (cursorRight - viewportWidthPx + marginPx)
-                            .toInt().coerceAtLeast(0)
-                        horizontalScrollState.scrollTo(target)
-                    } else if (cursorLeft < visibleLeft + marginPx) {
-                        val target = (cursorLeft - marginPx)
-                            .toInt().coerceAtLeast(0)
-                        horizontalScrollState.scrollTo(target)
+                    if (cursorRect.right > visibleRight - marginPx) {
+                        horizontalScrollState.scrollTo(
+                            (cursorRect.right - viewportWidthPx + marginPx).toInt().coerceAtLeast(0)
+                        )
+                    } else if (cursorRect.left < visibleLeft + marginPx) {
+                        horizontalScrollState.scrollTo(
+                            (cursorRect.left - marginPx).toInt().coerceAtLeast(0)
+                        )
                     }
 
-                    if (cursorBottom > visibleBottom - marginPx) {
-                        val target = (cursorBottom - viewportHeightPx + marginPx)
-                            .toInt().coerceAtLeast(0)
-                        verticalScrollState.scrollTo(target)
-                    } else if (cursorTop < visibleTop + marginPx) {
-                        val target = (cursorTop - marginPx)
-                            .toInt().coerceAtLeast(0)
-                        verticalScrollState.scrollTo(target)
+                    if (cursorRect.bottom > visibleBottom - marginPx) {
+                        verticalScrollState.scrollTo(
+                            (cursorRect.bottom - viewportHeightPx + marginPx).toInt().coerceAtLeast(0)
+                        )
+                    } else if (cursorRect.top < visibleTop + marginPx) {
+                        verticalScrollState.scrollTo(
+                            (cursorRect.top - marginPx).toInt().coerceAtLeast(0)
+                        )
                     }
                 }
 
@@ -1495,13 +1502,14 @@ fun CodeEditorWithLineNumbers(
                                 }
                             },
                         onTextLayout = { textLayout = it },
+                        visualTransformation = visualTransformation,
                         textStyle = TextStyle(
-                            color = Color(0xFFD4D4D4),
+                            color = defaultText,
                             fontFamily = codeFont,
                             fontSize = fontSize.sp,
                             lineHeight = lineHeight.sp
                         ),
-                        cursorBrush = SolidColor(Color(0xFF1A73E8))
+                        cursorBrush = SolidColor(cursorColor)
                     )
                 }
             }
