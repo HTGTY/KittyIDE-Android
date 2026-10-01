@@ -20,7 +20,10 @@ object HighlightColors {
     private val darkDefault    = Color(0xFFD4D4D4)  // 白
     private val darkTagName    = Color(0xFFE8BF6A)  // 黄褐（HTML 标签名）
     private val darkAttrName   = Color(0xFFFFC66D)  // 黄（HTML 属性名）
-    private val darkMeta       = Color(0xFFBBB529)  // 黄绿（DOCTYPE）
+    private val darkMeta       = Color(0xFFBBB529)  // 黄绿（DOCTYPE / @规则）
+    private val darkSelector   = Color(0xFFD7BA7D)  // 暗黄褐（CSS 选择器）
+    private val darkProperty   = Color(0xFF9876AA)  // 紫（CSS 属性名）
+    private val darkValue      = Color(0xFFA5C261)  // 浅绿（CSS 属性值）
 
     // ── 浅色 ──
     private val lightKeyword    = Color(0xFF0033B3)
@@ -31,9 +34,12 @@ object HighlightColors {
     private val lightIdentifier = Color(0xFF333333)
     private val lightPunct      = Color(0xFF333333)
     private val lightDefault    = Color(0xFF333333)
-    private val lightTagName    = Color(0xFF0033B3)  // 深蓝
-    private val lightAttrName   = Color(0xFF7A7A43)  // 暗黄绿
-    private val lightMeta       = Color(0xFF9E880D)  // 暗黄
+    private val lightTagName    = Color(0xFF0033B3)
+    private val lightAttrName   = Color(0xFF7A7A43)
+    private val lightMeta       = Color(0xFF9E880D)
+    private val lightSelector   = Color(0xFF800000)  // 暗红
+    private val lightProperty   = Color(0xFF0451A5)  // 深蓝
+    private val lightValue      = Color(0xFF008000)  // 深绿
 
     fun colorFor(type: TokenType, dark: Boolean): Color = if (dark) {
         when (type) {
@@ -47,6 +53,9 @@ object HighlightColors {
             TokenType.TAG_NAME    -> darkTagName
             TokenType.ATTR_NAME   -> darkAttrName
             TokenType.META        -> darkMeta
+            TokenType.SELECTOR    -> darkSelector
+            TokenType.PROPERTY    -> darkProperty
+            TokenType.VALUE       -> darkValue
             TokenType.DEFAULT     -> darkDefault
         }
     } else {
@@ -61,6 +70,9 @@ object HighlightColors {
             TokenType.TAG_NAME    -> lightTagName
             TokenType.ATTR_NAME   -> lightAttrName
             TokenType.META        -> lightMeta
+            TokenType.SELECTOR    -> lightSelector
+            TokenType.PROPERTY    -> lightProperty
+            TokenType.VALUE       -> lightValue
             TokenType.DEFAULT     -> lightDefault
         }
     }

@@ -134,6 +134,9 @@ data class LanguageRule(
                 "tagname", "tag_name" -> TokenType.TAG_NAME
                 "attrname", "attr_name" -> TokenType.ATTR_NAME
                 "meta" -> TokenType.META
+                "selector" -> TokenType.SELECTOR
+                "property" -> TokenType.PROPERTY
+                "value" -> TokenType.VALUE
                 else -> TokenType.DEFAULT
             }
         }

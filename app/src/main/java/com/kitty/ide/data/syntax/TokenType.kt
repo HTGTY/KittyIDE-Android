@@ -13,6 +13,9 @@ enum class TokenType {
     PUNCTUATION,  // 标点
     TAG_NAME,     // HTML 标签名
     ATTR_NAME,    // HTML 属性名
-    META,         // DOCTYPE 等元信息
+    META,         // DOCTYPE / @规则 等元信息
+    SELECTOR,     // CSS 选择器
+    PROPERTY,     // CSS 属性名
+    VALUE,        // CSS 属性值
     DEFAULT       // 其他（不渲染）
 }

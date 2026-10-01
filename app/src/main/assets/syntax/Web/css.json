@@ -1,0 +1,98 @@
+{
+  "name": "CSS",
+  "extensions": ["css"],
+  "rules": [
+    {
+      "type": "blockComment",
+      "start": "/*",
+      "end": "*/",
+      "token": "comment"
+    },
+    {
+      "type": "regex",
+      "pattern": "@[a-zA-Z-]+",
+      "tokens": {"0": "meta"}
+    },
+    {
+      "type": "regex",
+      "pattern": "\\.[a-zA-Z_][\\w-]*",
+      "tokens": {"0": "selector"}
+    },
+    {
+      "type": "regex",
+      "pattern": "#[a-zA-Z_][\\w-]*",
+      "tokens": {"0": "selector"}
+    },
+    {
+      "type": "regex",
+      "pattern": "::?[a-zA-Z-]+",
+      "tokens": {"0": "selector"}
+    },
+    {
+      "type": "regex",
+      "pattern": "&[a-zA-Z_][\\w-]*",
+      "tokens": {"0": "selector"}
+    },
+    {
+      "type": "region",
+      "start": {"pattern": "\\{", "tokens": {"0": "punctuation"}},
+      "end": {"pattern": "\\}", "tokens": {"0": "punctuation"}},
+      "innerRules": [
+        {
+          "type": "blockComment",
+          "start": "/*",
+          "end": "*/",
+          "token": "comment"
+        },
+        {
+          "type": "regex",
+          "pattern": "([a-zA-Z-]+)\\s*(:)",
+          "tokens": {"1": "property", "2": "punctuation"}
+        },
+        {
+          "type": "string",
+          "delimiters": ["\"", "'"],
+          "token": "value"
+        },
+        {
+          "type": "regex",
+          "pattern": "#[0-9a-fA-F]{3,8}\\b",
+          "tokens": {"0": "value"}
+        },
+        {
+          "type": "number",
+          "token": "value"
+        },
+        {
+          "type": "keyword",
+          "words": [
+            "red", "blue", "green", "yellow", "cyan", "magenta",
+            "black", "white", "gray", "orange", "purple", "pink",
+            "transparent", "currentcolor",
+            "block", "inline", "inline-block", "flex", "inline-flex",
+            "grid", "inline-grid", "table", "none", "contents",
+            "absolute", "relative", "fixed", "sticky", "static",
+            "left", "right", "center", "top", "bottom", "middle",
+            "hidden", "visible", "scroll", "clip",
+            "auto", "inherit", "initial", "unset", "revert",
+            "solid", "dashed", "dotted", "double",
+            "bold", "italic", "normal", "lighter", "bolder",
+            "uppercase", "lowercase", "capitalize",
+            "nowrap", "wrap", "wrap-reverse",
+            "border-box", "content-box", "padding-box",
+            "space-between", "space-around", "space-evenly",
+            "flex-start", "flex-end", "start", "end",
+            "row", "column", "row-reverse", "column-reverse",
+            "stretch", "baseline",
+            "cover", "contain", "fill",
+            "pointer", "default", "move", "text", "wait", "help",
+            "ease", "ease-in", "ease-out", "ease-in-out", "linear",
+            "infinite", "forwards", "backwards",
+            "!important"
+          ],
+          "token": "value"
+        }
+      ]
+    }
+  ]
+}
