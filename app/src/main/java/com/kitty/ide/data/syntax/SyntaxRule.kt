@@ -1,133 +1,217 @@
 package com.kitty.ide.data.syntax
 
 /**
- * 语法规则的抽象基类。
- * 每条规则负责：在文本的某个位置尝试匹配，返回匹配结束位置（exclusive），失败返回 -1。
+ * 词法分析产出的 Token。
+ */
+data class SyntaxToken(
+    val type: TokenType,
+    val start: Int,
+    val end: Int
+)
+
+/**
+ * 规则的匹配结果。
+ */
+data class RuleMatch(
+    val tokens: List<SyntaxToken>,
+    val endPos: Int
+)
+
+/**
+ * 语法规则基类。
+ * tryMatch 尝试从 [pos] 处匹配，[limit] 是文本边界。
+ * 匹配成功返回 RuleMatch，失败返回 null。
  */
 sealed class SyntaxRule {
-    abstract val token: TokenType
+    abstract fun tryMatch(text: String, pos: Int, limit: Int): RuleMatch?
+}
 
-    /**
-     * 尝试从 [start] 处匹配。
-     * @return 匹配结束位置（exclusive）；失败返回 -1
-     */
-    abstract fun tryMatch(text: String, start: Int): Int
+/**
+ * 模式匹配：正则 + 捕获组索引 → TokenType 映射。
+ * tokens 里 key 是捕获组索引（0 = 整体匹配），value 是 TokenType。
+ */
+class PatternMatch(
+    private val regex: Regex,
+    private val tokenMap: Map<Int, TokenType>
+) {
+    fun tryMatch(text: String, pos: Int, limit: Int): RuleMatch? {
+        val match = regex.matchAt(text, pos) ?: return null
+        // 空匹配不消耗字符，跳过
+        if (match.range.isEmpty()) return null
 
-    /** 行注释：从 prefix 到行尾 */
-    data class LineComment(
-        override val token: TokenType,
-        val prefix: String
-    ) : SyntaxRule() {
-        override fun tryMatch(text: String, start: Int): Int {
-            if (!text.startsWith(prefix, start)) return -1
-            var i = start + prefix.length
-            while (i < text.length && text[i] != '\n') i++
-            return i
+        val tokens = mutableListOf<SyntaxToken>()
+        val groups = match.groups
+        for ((idx, type) in tokenMap) {
+            if (idx >= groups.size) continue
+            val group = groups[idx] ?: continue
+            if (group.range.isEmpty()) continue
+            tokens.add(SyntaxToken(type, group.range.first, group.range.last + 1))
         }
+        return RuleMatch(tokens, match.range.last + 1)
     }
+}
 
-    /** 块注释：从 start 到 end */
-    data class BlockComment(
-        override val token: TokenType,
-        val startDelim: String,
-        val endDelim: String
-    ) : SyntaxRule() {
-        override fun tryMatch(text: String, start: Int): Int {
-            if (!text.startsWith(startDelim, start)) return -1
-            var i = start + startDelim.length
-            while (i < text.length) {
-                if (text.startsWith(endDelim, i)) return i + endDelim.length
-                i++
+// ─────────────────────────────────────────────
+// 具体规则类型
+// ─────────────────────────────────────────────
+
+/** 行注释：从 prefix 到行尾 */
+data class LineCommentRule(
+    val prefix: String,
+    val token: TokenType
+) : SyntaxRule() {
+    override fun tryMatch(text: String, pos: Int, limit: Int): RuleMatch? {
+        if (!text.startsWith(prefix, pos)) return null
+        var i = pos + prefix.length
+        while (i < limit && text[i] != '\n') i++
+        return RuleMatch(listOf(SyntaxToken(token, pos, i)), i)
+    }
+}
+
+/** 块注释：从 start 到 end，未闭合吃到 limit */
+data class BlockCommentRule(
+    val startDelim: String,
+    val endDelim: String,
+    val token: TokenType
+) : SyntaxRule() {
+    override fun tryMatch(text: String, pos: Int, limit: Int): RuleMatch? {
+        if (!text.startsWith(startDelim, pos)) return null
+        var i = pos + startDelim.length
+        while (i < limit) {
+            if (text.startsWith(endDelim, i)) {
+                return RuleMatch(listOf(SyntaxToken(token, pos, i + endDelim.length)), i + endDelim.length)
             }
-            return i  // 未闭合，吃到结尾
+            i++
         }
+        return RuleMatch(listOf(SyntaxToken(token, pos, limit)), limit)
     }
+}
 
-    /** 字符串：任一定界符匹配，内部处理转义 */
-    data class StringRule(
-        override val token: TokenType,
-        val delimiters: List<String>
-    ) : SyntaxRule() {
-        override fun tryMatch(text: String, start: Int): Int {
-            val delim = delimiters.firstOrNull { text.startsWith(it, start) } ?: return -1
-            var i = start + delim.length
-            while (i < text.length) {
-                // 转义
-                if (text[i] == '\\' && i + 1 < text.length) {
-                    i += 2
-                    continue
-                }
-                if (text.startsWith(delim, i)) return i + delim.length
-                // 遇到换行且还没闭合（反引号除外）
-                if (text[i] == '\n' && delim != "`") return i
-                i++
-            }
-            return i
-        }
-    }
-
-    /** 数字：支持十进制、小数、科学计数法、十六进制 */
-    data class NumberRule(
-        override val token: TokenType
-    ) : SyntaxRule() {
-        override fun tryMatch(text: String, start: Int): Int {
-            val c = text[start]
-            if (!c.isDigit()) return -1
-
-            var i = start
-            // 十六进制
-            if (c == '0' && i + 1 < text.length && (text[i + 1] == 'x' || text[i + 1] == 'X')) {
+/** 字符串：任一定界符匹配 */
+data class StringRule(
+    val delimiters: List<String>,
+    val token: TokenType
+) : SyntaxRule() {
+    override fun tryMatch(text: String, pos: Int, limit: Int): RuleMatch? {
+        val delim = delimiters.firstOrNull { text.startsWith(it, pos) } ?: return null
+        var i = pos + delim.length
+        while (i < limit) {
+            if (text[i] == '\\' && i + 1 < limit) {
                 i += 2
-                while (i < text.length && (text[i].isDigit() || text[i] in 'a'..'f' || text[i] in 'A'..'F')) i++
-                return i
+                continue
             }
-            // 十进制
-            while (i < text.length && text[i].isDigit()) i++
-            if (i < text.length && text[i] == '.') {
-                i++
-                while (i < text.length && text[i].isDigit()) i++
+            if (text.startsWith(delim, i)) {
+                return RuleMatch(listOf(SyntaxToken(token, pos, i + delim.length)), i + delim.length)
             }
-            // 科学计数法
-            if (i < text.length && (text[i] == 'e' || text[i] == 'E')) {
-                val save = i
-                i++
-                if (i < text.length && (text[i] == '+' || text[i] == '-')) i++
-                if (i < text.length && text[i].isDigit()) {
-                    while (i < text.length && text[i].isDigit()) i++
-                } else {
-                    i = save
+            if (text[i] == '\n' && delim != "`") {
+                return RuleMatch(listOf(SyntaxToken(token, pos, i)), i)
+            }
+            i++
+        }
+        return RuleMatch(listOf(SyntaxToken(token, pos, limit)), limit)
+    }
+}
+
+/** 数字：十进制、小数、科学计数法、十六进制 */
+data class NumberRule(
+    val token: TokenType
+) : SyntaxRule() {
+    override fun tryMatch(text: String, pos: Int, limit: Int): RuleMatch? {
+        val c = text[pos]
+        if (!c.isDigit()) return null
+
+        var i = pos
+        if (c == '0' && i + 1 < limit && (text[i + 1] == 'x' || text[i + 1] == 'X')) {
+            i += 2
+            while (i < limit && (text[i].isDigit() || text[i] in 'a'..'f' || text[i] in 'A'..'F')) i++
+            return RuleMatch(listOf(SyntaxToken(token, pos, i)), i)
+        }
+        while (i < limit && text[i].isDigit()) i++
+        if (i < limit && text[i] == '.') {
+            i++
+            while (i < limit && text[i].isDigit()) i++
+        }
+        if (i < limit && (text[i] == 'e' || text[i] == 'E')) {
+            val save = i
+            i++
+            if (i < limit && (text[i] == '+' || text[i] == '-')) i++
+            if (i < limit && text[i].isDigit()) {
+                while (i < limit && text[i].isDigit()) i++
+            } else {
+                i = save
+            }
+        }
+        return RuleMatch(listOf(SyntaxToken(token, pos, i)), i)
+    }
+}
+
+/** 关键字：按 word 匹配，前后需要边界 */
+data class KeywordRule(
+    val words: Set<String>,
+    val token: TokenType
+) : SyntaxRule() {
+    override fun tryMatch(text: String, pos: Int, limit: Int): RuleMatch? {
+        val c = text[pos]
+        if (!c.isLetter() && c != '_' && c != '$') return null
+        var end = pos + 1
+        while (end < limit) {
+            val ch = text[end]
+            if (ch.isLetterOrDigit() || ch == '_' || ch == '$') end++ else break
+        }
+        val word = text.substring(pos, end)
+        if (word !in words) return null
+        return RuleMatch(listOf(SyntaxToken(token, pos, end)), end)
+    }
+}
+
+/** 通用正则规则：支持捕获组样式映射 */
+data class RegexRule(
+    val pattern: PatternMatch
+) : SyntaxRule() {
+    override fun tryMatch(text: String, pos: Int, limit: Int): RuleMatch? {
+        return pattern.tryMatch(text, pos, limit)
+    }
+}
+
+/**
+ * 区域规则：从 start 模式进入，end 模式退出，中间用 innerRules 扫描。
+ */
+data class RegionRule(
+    val start: PatternMatch,
+    val end: PatternMatch,
+    val innerRules: List<SyntaxRule>
+) : SyntaxRule() {
+    override fun tryMatch(text: String, pos: Int, limit: Int): RuleMatch? {
+        val startMatch = start.tryMatch(text, pos, limit) ?: return null
+        val allTokens = mutableListOf<SyntaxToken>()
+        allTokens.addAll(startMatch.tokens)
+        var p = startMatch.endPos
+
+        while (p < limit) {
+            // ① 先尝试 innerRules
+            var innerMatched = false
+            for (rule in innerRules) {
+                val r = rule.tryMatch(text, p, limit)
+                if (r != null) {
+                    allTokens.addAll(r.tokens)
+                    p = r.endPos
+                    innerMatched = true
+                    break
                 }
             }
-            return i
-        }
-    }
+            if (innerMatched) continue
 
-    /** 关键字：按 word 匹配，需要前后边界 */
-    data class KeywordRule(
-        override val token: TokenType,
-        val words: Set<String>
-    ) : SyntaxRule() {
-        override fun tryMatch(text: String, start: Int): Int {
-            val c = text[start]
-            if (!c.isLetter() && c != '_' && c != '$') return -1
-            var end = start + 1
-            while (end < text.length) {
-                val ch = text[end]
-                if (ch.isLetterOrDigit() || ch == '_' || ch == '$') end++ else break
+            // ② 尝试 end
+            val endMatch = end.tryMatch(text, p, limit)
+            if (endMatch != null) {
+                allTokens.addAll(endMatch.tokens)
+                return RuleMatch(allTokens, endMatch.endPos)
             }
-            val word = text.substring(start, end)
-            return if (word in words) end else -1
-        }
-    }
 
-    /** 通用正则规则 */
-    data class RegexRule(
-        override val token: TokenType,
-        val regex: Regex
-    ) : SyntaxRule() {
-        override fun tryMatch(text: String, start: Int): Int {
-            val match = regex.matchAt(text, start) ?: return -1
-            return match.range.last + 1
+            // ③ 都不匹配，前进一个字符
+            p++
         }
+
+        return RuleMatch(allTokens, limit)
     }
 }

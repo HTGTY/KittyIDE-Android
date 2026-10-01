@@ -11,5 +11,8 @@ enum class TokenType {
     OPERATOR,     // 运算符
     IDENTIFIER,   // 标识符
     PUNCTUATION,  // 标点
-    DEFAULT       // 其他（空白等，一般不渲染）
+    TAG_NAME,     // HTML 标签名
+    ATTR_NAME,    // HTML 属性名
+    META,         // DOCTYPE 等元信息
+    DEFAULT       // 其他（不渲染）
 }

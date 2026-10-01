@@ -1,0 +1,57 @@
+{
+  "name": "HTML",
+  "extensions": ["html", "htm"],
+  "rules": [
+    {
+      "type": "region",
+      "start": {"pattern": "<!--", "tokens": {"0": "comment"}},
+      "end":   {"pattern": "-->",  "tokens": {"0": "comment"}},
+      "innerRules": []
+    },
+    {
+      "type": "region",
+      "start": {"pattern": "<!DOCTYPE\\b", "tokens": {"0": "meta"}},
+      "end":   {"pattern": ">",           "tokens": {"0": "meta"}},
+      "innerRules": [
+        {
+          "type": "string",
+          "delimiters": ["\"", "'"],
+          "token": "string"
+        }
+      ]
+    },
+    {
+      "type": "regex",
+      "pattern": "</\\s*([a-zA-Z][\\w:-]*)\\s*>",
+      "tokens": {"0": "punctuation", "1": "tagname"}
+    },
+    {
+      "type": "region",
+      "start": {
+        "pattern": "(<\\s*)([a-zA-Z][\\w:-]*)",
+        "tokens": {"1": "punctuation", "2": "tagname"}
+      },
+      "end": {
+        "pattern": "/?>",
+        "tokens": {"0": "punctuation"}
+      },
+      "innerRules": [
+        {
+          "type": "string",
+          "delimiters": ["\"", "'"],
+          "token": "string"
+        },
+        {
+          "type": "regex",
+          "pattern": "=",
+          "tokens": {"0": "operator"}
+        },
+        {
+          "type": "regex",
+          "pattern": "[a-zA-Z_:][\\w:.-]*",
+          "tokens": {"0": "attrname"}
+        }
+      ]
+    }
+  ]
+}
