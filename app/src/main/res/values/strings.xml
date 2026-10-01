@@ -1,8 +1,160 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
+
+    <!-- App -->
     <string name="app_name">Kitty IDE</string>
-    <string name="start_new_project">新建项目</string>
-    <string name="start_open_project">打开项目</string>
-    <string name="start_slogan">轻量移动端代码编辑器</string>
-    <string name="start_version">v0.0.12</string>
-    <string name="editor_placeholder">编辑器待接入 (CodeMirror 6)</string>
+    <string name="start_slogan">A lightweight mobile IDE</string>
+    <string name="app_slogan">Kitty IDE, your lightweight mobile workstation 😼</string>
+
+    <!-- Start Screen -->
+    <string name="start_new_project">New Project</string>
+    <string name="start_open_project">Open Project</string>
+    <string name="start_all_projects">All Projects</string>
+    <string name="start_no_projects">No projects yet. Create one to get started~</string>
+    <string name="start_settings">Settings</string>
+
+    <!-- Permission Dialog -->
+    <string name="perm_title">Storage Permission Required</string>
+    <string name="perm_message">To provide a better editing experience, Kitty IDE needs full file access.\n\nIf granted, projects will be stored in /sdcard/Documents/Kitty/project/.\nIf denied, projects will be stored in the app\'s private directory.</string>
+    <string name="perm_grant">Grant</string>
+    <string name="perm_deny">Deny</string>
+
+    <!-- New Project Dialog -->
+    <string name="new_project_title">New Project</string>
+    <string name="new_project_name">Project name *</string>
+    <string name="new_project_version">Initial version</string>
+    <string name="new_project_description">Description (optional)</string>
+    <string name="new_project_language">Program language</string>
+    <string name="new_project_create_sample">Create sample file (index.html)</string>
+    <string name="new_project_create">Create</string>
+    <string name="new_project_cancel">Cancel</string>
+    <string name="new_project_failed">Failed to create. The name may already exist.</string>
+
+    <!-- Editor Toolbar -->
+    <string name="editor_save">Save</string>
+    <string name="editor_file">File</string>
+    <string name="editor_view">View</string>
+    <string name="editor_settings">Settings</string>
+    <string name="editor_terminal">Terminal</string>
+    <string name="editor_run">Run</string>
+
+    <!-- Editor Toolbar Toasts -->
+    <string name="toast_saved">Saved</string>
+    <string name="toast_no_file_to_save">No file to save</string>
+    <string name="toast_no_open_file">No file is open</string>
+    <string name="toast_no_runnable_html">No runnable HTML file found</string>
+    <string name="toast_path_copied">Path copied</string>
+    <string name="toast_preview_not_supported">Preview not supported for this format yet</string>
+    <string name="toast_create_failed">Failed to create. It may already exist.</string>
+    <string name="toast_rename_failed">Rename failed. A file with that name may exist.</string>
+    <string name="toast_deleted">Deleted</string>
+    <string name="toast_delete_failed">Delete failed</string>
+    <string name="toast_symbol_settings_todo">Symbol bar settings coming soon</string>
+    <string name="toast_saf_unsupported">This directory is not supported yet</string>
+
+    <!-- Editor Empty State -->
+    <string name="editor_no_open_file">No file is open</string>
+    <string name="editor_open_file_tree_hint">Tap the top-left icon to open the file tree</string>
+
+    <!-- Editor File Tree -->
+    <string name="editor_explorer">Explorer</string>
+    <string name="editor_file_tree_hint">Long press blank area or file for menu</string>
+
+    <!-- Editor Tab Menu -->
+    <string name="tab_close">Close</string>
+    <string name="tab_close_all">Close All</string>
+    <string name="tab_close_left">Close to the Left</string>
+    <string name="tab_close_right">Close to the Right</string>
+    <string name="tab_duplicate">Duplicate</string>
+
+    <!-- Editor File Menu -->
+    <string name="menu_new_file">New File</string>
+    <string name="menu_new_folder">New Folder</string>
+    <string name="menu_new_html">New HTML File</string>
+    <string name="menu_new_css">New CSS File</string>
+    <string name="menu_new_js">New JS File</string>
+    <string name="menu_rename">Rename</string>
+    <string name="menu_copy_path">Copy Path</string>
+    <string name="menu_delete">Delete</string>
+
+    <!-- Editor New Item Dialog -->
+    <string name="new_item_name">Name</string>
+    <string name="new_item_create">Create</string>
+    <string name="new_item_cancel">Cancel</string>
+    <string name="new_item_hint_file">Enter full file name, e.g. main.py</string>
+    <string name="new_item_hint_folder">Enter folder name</string>
+    <string name="new_item_hint_html">Enter file name (.html auto-added)</string>
+    <string name="new_item_hint_css">Enter file name (.css auto-added)</string>
+    <string name="new_item_hint_js">Enter file name (.js auto-added)</string>
+
+    <!-- Editor Rename Dialog -->
+    <string name="rename_title">Rename</string>
+    <string name="rename_new_name">New name</string>
+    <string name="rename_confirm">OK</string>
+    <string name="rename_cancel">Cancel</string>
+
+    <!-- Editor Delete Dialog -->
+    <string name="delete_title">Delete</string>
+    <string name="delete_confirm_folder">Delete folder \"%1$s\" and all its contents? This cannot be undone.</string>
+    <string name="delete_confirm_file">Delete \"%1$s\"? This cannot be undone.</string>
+    <string name="delete_confirm">Delete</string>
+    <string name="delete_cancel">Cancel</string>
+
+    <!-- Name Validation -->
+    <string name="name_empty">Name cannot be empty</string>
+    <string name="name_trim">Name cannot start or end with spaces</string>
+    <string name="name_too_long">Name cannot exceed %1$d characters</string>
+    <string name="name_dot_prefix">Name cannot start with \".\"</string>
+    <string name="name_forbidden_char">Name cannot contain character: %1$s</string>
+
+    <!-- Terminal -->
+    <string name="terminal_title">Terminal</string>
+    <string name="terminal_clear">Clear</string>
+    <string name="terminal_close">Close</string>
+    <string name="terminal_empty">No output yet</string>
+
+    <!-- Preview Screen -->
+    <string name="preview_back">Back to editor</string>
+    <string name="preview_terminal">Terminal</string>
+    <string name="preview_refresh">Refresh</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_about">About</string>
+    <string name="settings_about_subtitle">Version, author, source code</string>
+    <string name="settings_display">Display</string>
+    <string name="settings_display_subtitle">Theme mode · Current: %1$s</string>
+    <string name="settings_font">Editor Font</string>
+    <string name="settings_font_subtitle">Current: %1$s</string>
+
+    <!-- About Dialog -->
+    <string name="about_title">About %1$s</string>
+    <string name="about_version">Version</string>
+    <string name="about_environment">Environment</string>
+    <string name="about_author">Author</string>
+    <string name="about_source">Source</string>
+    <string name="about_thanks">Thanks</string>
+    <string name="about_thanks_placeholder">To be filled</string>
+    <string name="about_copyright">Copyright (C) HTGTY386</string>
+    <string name="about_ok">Got it</string>
+
+    <!-- Theme Dialog -->
+    <string name="theme_title">Theme Mode</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_auto">Follow System</string>
+    <string name="theme_done">Done</string>
+
+    <!-- Font Dialog -->
+    <string name="font_title">Editor Font</string>
+    <string name="font_done">Done</string>
+
+    <!-- Content Descriptions -->
+    <string name="cd_toggle_tree">Toggle file tree</string>
+    <string name="cd_undo">Undo</string>
+    <string name="cd_redo">Redo</string>
+
+    <!-- Misc -->
+    <string name="version_format">v%1$s</string>
+
 </resources>

@@ -56,7 +56,6 @@ import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.NoteAdd
-import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -91,6 +90,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
@@ -101,6 +101,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.kitty.ide.R
 import com.kitty.ide.data.editor.UndoManager
 import com.kitty.ide.data.model.FileType
 import com.kitty.ide.data.model.ProjectFile
@@ -114,13 +115,31 @@ import com.kitty.ide.ui.viewmodel.EditorViewModel
 import com.kitty.ide.util.NameValidator
 import java.io.File
 
-/** 新建项类型 */
-enum class NewItemType(val title: String, val defaultExt: String?, val hint: String) {
-    FILE("新建文件", null, "输入完整文件名，例如 main.py"),
-    FOLDER("新建文件夹", null, "输入文件夹名"),
-    HTML("新建 HTML 文件", ".html", "输入文件名（自动补 .html）"),
-    CSS("新建 CSS 文件", ".css", "输入文件名（自动补 .css）"),
-    JS("新建 JS 文件", ".js", "输入文件名（自动补 .js）")
+/** 新建项类型（只保留扩展名，标题和提示走 strings.xml） */
+enum class NewItemType(val defaultExt: String?) {
+    FILE(null),
+    FOLDER(null),
+    HTML(".html"),
+    CSS(".css"),
+    JS(".js")
+}
+
+/** 拿新建项的标题资源 ID */
+private fun titleResOf(type: NewItemType): Int = when (type) {
+    NewItemType.FILE -> R.string.menu_new_file
+    NewItemType.FOLDER -> R.string.menu_new_folder
+    NewItemType.HTML -> R.string.menu_new_html
+    NewItemType.CSS -> R.string.menu_new_css
+    NewItemType.JS -> R.string.menu_new_js
+}
+
+/** 拿新建项的提示资源 ID */
+private fun hintResOf(type: NewItemType): Int = when (type) {
+    NewItemType.FILE -> R.string.new_item_hint_file
+    NewItemType.FOLDER -> R.string.new_item_hint_folder
+    NewItemType.HTML -> R.string.new_item_hint_html
+    NewItemType.CSS -> R.string.new_item_hint_css
+    NewItemType.JS -> R.string.new_item_hint_js
 }
 
 /** 返回每个新建类型对应的图标 */
@@ -129,7 +148,7 @@ private fun iconForNewItem(type: NewItemType): ImageVector = when (type) {
     NewItemType.FOLDER -> Icons.Outlined.CreateNewFolder
     NewItemType.HTML -> Icons.Outlined.Code
     NewItemType.CSS -> Icons.Outlined.Brush
-    NewItemType.JS -> Icons.Outlined.Terminal
+    NewItemType.JS -> Icons.Outlined.Code
 }
 
 fun autoExpandChain(
@@ -150,9 +169,6 @@ fun autoExpandChain(
     }
 }
 
-/**
- * 回车自动缩进
- */
 private fun applyAutoIndent(old: TextFieldValue, new: TextFieldValue): TextFieldValue {
     val oldText = old.text
     val newText = new.text
@@ -230,9 +246,6 @@ private fun applyAutoIndent(old: TextFieldValue, new: TextFieldValue): TextField
     return new
 }
 
-/**
- * 输入 } 时，自动对齐到匹配的 { 的缩进
- */
 private fun alignClosingBrace(
     text: String,
     bracePos: Int,
@@ -291,10 +304,8 @@ fun EditorScreen(
     val activeIndex by viewModel.activeFileIndex.collectAsState()
     val projectDir by viewModel.projectDir.collectAsState()
 
-    // ── 当前选中的代码字体 ──
     val codeFont = rememberCodeFontFamily()
 
-    // ── 当前是否深色主题 ──
     val themeMode by ThemeManager.themeMode
     val darkTheme = when (themeMode) {
         "Light" -> false
@@ -302,11 +313,9 @@ fun EditorScreen(
         else -> androidx.compose.foundation.isSystemInDarkTheme()
     }
 
-    // ── 当前激活文件 → 语言规则 → 高亮变换器 ──
     val activeFileName: String? = if (activeIndex in openFiles.indices) {
         openFiles[activeIndex].file.name
     } else null
-    // 订阅语法加载状态：加载完成后自动刷新
     val rules by LanguageRegistry.rules.collectAsState()
     val activeLanguage = remember(activeFileName, rules) {
         activeFileName?.let { LanguageRegistry.forFileName(it) }
@@ -388,7 +397,7 @@ fun EditorScreen(
 
     fun handleCopyPath(target: ProjectFile) {
         clipboard.setText(AnnotatedString(target.file.absolutePath))
-        Toast.makeText(context, "路径已复制", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.toast_path_copied), Toast.LENGTH_SHORT).show()
     }
 
     fun handleDelete(target: ProjectFile) {
@@ -437,7 +446,7 @@ fun EditorScreen(
                 Icon(
                     imageVector = if (isDrawerOpen) Icons.AutoMirrored.Filled.ArrowBack
                                   else Icons.Default.Menu,
-                    contentDescription = "切换文件树",
+                    contentDescription = stringResource(R.string.cd_toggle_tree),
                     tint = MaterialTheme.colorScheme.onSurface
                 )
             }
@@ -447,22 +456,22 @@ fun EditorScreen(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextMenuButton("保存") {
+                TextMenuButton(stringResource(R.string.editor_save)) {
                     if (viewModel.saveActiveFile()) {
-                        Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_saved), Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(context, "没有可保存的文件", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.toast_no_file_to_save), Toast.LENGTH_SHORT).show()
                     }
                 }
-                TextMenuButton("文件") { }
-                TextMenuButton("视图") { }
-                TextMenuButton("设置") { onOpenSettings() }
+                TextMenuButton(stringResource(R.string.editor_file)) { }
+                TextMenuButton(stringResource(R.string.editor_view)) { }
+                TextMenuButton(stringResource(R.string.editor_settings)) { onOpenSettings() }
             }
 
             IconButton(onClick = { showTerminal = !showTerminal }) {
                 Icon(
                     imageVector = Icons.Default.Terminal,
-                    contentDescription = "终端",
+                    contentDescription = stringResource(R.string.editor_terminal),
                     tint = if (showTerminal) MaterialTheme.colorScheme.primary
                            else MaterialTheme.colorScheme.onSurface
                 )
@@ -471,7 +480,7 @@ fun EditorScreen(
             IconButton(onClick = {
                 viewModel.saveActiveFile()
                 if (activeIndex !in openFiles.indices) {
-                    Toast.makeText(context, "没有打开的文件", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.toast_no_open_file), Toast.LENGTH_SHORT).show()
                     return@IconButton
                 }
                 val currentFile = openFiles[activeIndex].file
@@ -486,12 +495,12 @@ fun EditorScreen(
                     TerminalManager.clear()
                     onRun(htmlFile.absolutePath)
                 } else {
-                    Toast.makeText(context, "没有找到可运行的 HTML 文件", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.toast_no_runnable_html), Toast.LENGTH_SHORT).show()
                 }
             }) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "运行",
+                    contentDescription = stringResource(R.string.editor_run),
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -537,11 +546,11 @@ fun EditorScreen(
                     expanded = showTabMenu,
                     onDismissRequest = { showTabMenu = false }
                 ) {
-                    DropdownMenuItem(text = { Text("关闭该文件") }, onClick = { viewModel.closeFile(tabMenuIndex); showTabMenu = false })
-                    DropdownMenuItem(text = { Text("关闭所有文件") }, onClick = { viewModel.closeAllFiles(); showTabMenu = false })
-                    DropdownMenuItem(text = { Text("关闭左侧文件") }, onClick = { viewModel.closeLeftFiles(tabMenuIndex); showTabMenu = false })
-                    DropdownMenuItem(text = { Text("关闭右侧文件") }, onClick = { viewModel.closeRightFiles(tabMenuIndex); showTabMenu = false })
-                    DropdownMenuItem(text = { Text("创建副本") }, onClick = { viewModel.createCopy(tabMenuIndex); showTabMenu = false })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.tab_close)) }, onClick = { viewModel.closeFile(tabMenuIndex); showTabMenu = false })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.tab_close_all)) }, onClick = { viewModel.closeAllFiles(); showTabMenu = false })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.tab_close_left)) }, onClick = { viewModel.closeLeftFiles(tabMenuIndex); showTabMenu = false })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.tab_close_right)) }, onClick = { viewModel.closeRightFiles(tabMenuIndex); showTabMenu = false })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.tab_duplicate)) }, onClick = { viewModel.createCopy(tabMenuIndex); showTabMenu = false })
                 }
             }
         }
@@ -557,13 +566,13 @@ fun EditorScreen(
                         .padding(8.dp)
                 ) {
                     Text(
-                        text = "资源管理器",
+                        text = stringResource(R.string.editor_explorer),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "长按空白 / 文件可弹出菜单",
+                        text = stringResource(R.string.editor_file_tree_hint),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )
@@ -599,7 +608,7 @@ fun EditorScreen(
                                         if (f.fileType == FileType.TEXT) {
                                             viewModel.openFile(f.file)
                                         } else {
-                                            Toast.makeText(context, "暂不支持预览此格式", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, context.getString(R.string.toast_preview_not_supported), Toast.LENGTH_SHORT).show()
                                         }
                                     },
                                     onNewItem = { parent, type -> handleNewItem(parent, type) },
@@ -622,7 +631,7 @@ fun EditorScreen(
                             onDismissRequest = { showFileTreeMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("新建文件") },
+                                text = { Text(stringResource(R.string.menu_new_file)) },
                                 leadingIcon = { MenuIcon(Icons.Outlined.NoteAdd) },
                                 onClick = {
                                     showFileTreeMenu = false
@@ -631,7 +640,7 @@ fun EditorScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("新建文件夹") },
+                                text = { Text(stringResource(R.string.menu_new_folder)) },
                                 leadingIcon = { MenuIcon(Icons.Outlined.CreateNewFolder) },
                                 onClick = {
                                     showFileTreeMenu = false
@@ -640,7 +649,7 @@ fun EditorScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("新建 HTML 文件") },
+                                text = { Text(stringResource(R.string.menu_new_html)) },
                                 leadingIcon = { MenuIcon(Icons.Outlined.Code) },
                                 onClick = {
                                     showFileTreeMenu = false
@@ -649,7 +658,7 @@ fun EditorScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("新建 CSS 文件") },
+                                text = { Text(stringResource(R.string.menu_new_css)) },
                                 leadingIcon = { MenuIcon(Icons.Outlined.Brush) },
                                 onClick = {
                                     showFileTreeMenu = false
@@ -658,8 +667,8 @@ fun EditorScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("新建 JS 文件") },
-                                leadingIcon = { MenuIcon(Icons.Outlined.Terminal) },
+                                text = { Text(stringResource(R.string.menu_new_js)) },
+                                leadingIcon = { MenuIcon(Icons.Outlined.Code) },
                                 onClick = {
                                     showFileTreeMenu = false
                                     val dir = projectDir ?: return@DropdownMenuItem
@@ -693,12 +702,12 @@ fun EditorScreen(
                 Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "没有打开的文件",
+                            text = stringResource(R.string.editor_no_open_file),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "点击左上角展开文件树",
+                            text = stringResource(R.string.editor_open_file_tree_hint),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
@@ -741,7 +750,7 @@ fun EditorScreen(
                 }
             },
             onMoreClick = {
-                Toast.makeText(context, "符号栏设置待开发", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.toast_symbol_settings_todo), Toast.LENGTH_SHORT).show()
             }
         )
     }
@@ -757,7 +766,7 @@ fun EditorScreen(
                 newItemName = ""
                 newItemNameError = null
             },
-            title = { Text(newItemType.title) },
+            title = { Text(stringResource(titleResOf(newItemType))) },
             text = {
                 Column {
                     OutlinedTextField(
@@ -766,8 +775,8 @@ fun EditorScreen(
                             newItemName = it
                             newItemNameError = null
                         },
-                        label = { Text("名称") },
-                        placeholder = { Text(newItemType.hint) },
+                        label = { Text(stringResource(R.string.new_item_name)) },
+                        placeholder = { Text(stringResource(hintResOf(newItemType))) },
                         singleLine = true,
                         isError = newItemNameError != null,
                         modifier = Modifier.fillMaxWidth()
@@ -786,7 +795,7 @@ fun EditorScreen(
                 TextButton(
                     onClick = {
                         val name = newItemName
-                        val error = NameValidator.validate(name)
+                        val error = NameValidator.validate(context, name)
                         if (error != null) {
                             newItemNameError = error
                             return@TextButton
@@ -801,13 +810,13 @@ fun EditorScreen(
                                     if (success) {
                                         fileTreeVersion++
                                     } else {
-                                        newItemNameError = "创建失败，可能已存在"
+                                        newItemNameError = context.getString(R.string.toast_create_failed)
                                     }
                                 }
                             } else {
                                 val ext = newItemType.defaultExt
                                 val fileName = if (ext != null && !name.endsWith(ext)) name + ext else name
-                                val finalError = NameValidator.validate(fileName)
+                                val finalError = NameValidator.validate(context, fileName)
                                 if (finalError != null) {
                                     newItemNameError = finalError
                                     return@TextButton
@@ -816,7 +825,7 @@ fun EditorScreen(
                                     if (success) {
                                         fileTreeVersion++
                                     } else {
-                                        newItemNameError = "创建失败，可能已存在"
+                                        newItemNameError = context.getString(R.string.toast_create_failed)
                                     }
                                 }
                             }
@@ -826,14 +835,14 @@ fun EditorScreen(
                             newItemParentDir = null
                         }
                     }
-                ) { Text("创建") }
+                ) { Text(stringResource(R.string.new_item_create)) }
             },
             dismissButton = {
                 TextButton(onClick = {
                     showNewItemDialog = false
                     newItemName = ""
                     newItemNameError = null
-                }) { Text("取消") }
+                }) { Text(stringResource(R.string.new_item_cancel)) }
             }
         )
     }
@@ -847,7 +856,7 @@ fun EditorScreen(
                 renameError = null
                 renameTarget = null
             },
-            title = { Text("重命名") },
+            title = { Text(stringResource(R.string.rename_title)) },
             text = {
                 Column {
                     OutlinedTextField(
@@ -856,7 +865,7 @@ fun EditorScreen(
                             renameValue = it
                             renameError = null
                         },
-                        label = { Text("新名称") },
+                        label = { Text(stringResource(R.string.rename_new_name)) },
                         singleLine = true,
                         isError = renameError != null,
                         modifier = Modifier.fillMaxWidth()
@@ -874,7 +883,7 @@ fun EditorScreen(
             confirmButton = {
                 TextButton(onClick = {
                     val name = renameValue
-                    val error = NameValidator.validate(name)
+                    val error = NameValidator.validate(context, name)
                     if (error != null) {
                         renameError = error
                         return@TextButton
@@ -886,10 +895,10 @@ fun EditorScreen(
                             renameValue = ""
                             renameTarget = null
                         } else {
-                            renameError = "重命名失败，可能已存在同名项"
+                            renameError = context.getString(R.string.toast_rename_failed)
                         }
                     }
-                }) { Text("确定") }
+                }) { Text(stringResource(R.string.rename_confirm)) }
             },
             dismissButton = {
                 TextButton(onClick = {
@@ -897,43 +906,41 @@ fun EditorScreen(
                     renameValue = ""
                     renameError = null
                     renameTarget = null
-                }) { Text("取消") }
+                }) { Text(stringResource(R.string.rename_cancel)) }
             }
         )
     }
 
     if (showDeleteConfirm && deleteTarget != null) {
         val target = deleteTarget!!
+        val message = if (target.isDirectory) {
+            stringResource(R.string.delete_confirm_folder, target.name)
+        } else {
+            stringResource(R.string.delete_confirm_file, target.name)
+        }
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false; deleteTarget = null },
-            title = { Text("删除确认") },
-            text = {
-                Text(
-                    if (target.isDirectory)
-                        "确定要删除文件夹「${target.name}」及其全部内容吗？此操作不可撤销。"
-                    else
-                        "确定要删除「${target.name}」吗？此操作不可撤销。"
-                )
-            },
+            title = { Text(stringResource(R.string.delete_title)) },
+            text = { Text(message) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteFile(target.file) { success ->
                         if (success) {
                             fileTreeVersion++
-                            Toast.makeText(context, "已删除", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.toast_deleted), Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "删除失败", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.toast_delete_failed), Toast.LENGTH_SHORT).show()
                         }
                     }
                     showDeleteConfirm = false
                     deleteTarget = null
-                }) { Text("删除") }
+                }) { Text(stringResource(R.string.delete_confirm)) }
             },
             dismissButton = {
                 TextButton(onClick = {
                     showDeleteConfirm = false
                     deleteTarget = null
-                }) { Text("取消") }
+                }) { Text(stringResource(R.string.delete_cancel)) }
             }
         )
     }
@@ -941,11 +948,11 @@ fun EditorScreen(
 
 @Composable
 fun NewMenuOptions(onSelect: (NewItemType) -> Unit) {
-    MenuOption("新建文件", Icons.Outlined.NoteAdd) { onSelect(NewItemType.FILE) }
-    MenuOption("新建文件夹", Icons.Outlined.CreateNewFolder) { onSelect(NewItemType.FOLDER) }
-    MenuOption("新建 HTML 文件", Icons.Outlined.Code) { onSelect(NewItemType.HTML) }
-    MenuOption("新建 CSS 文件", Icons.Outlined.Brush) { onSelect(NewItemType.CSS) }
-    MenuOption("新建 JS 文件", Icons.Outlined.Terminal) { onSelect(NewItemType.JS) }
+    MenuOption(stringResource(R.string.menu_new_file), Icons.Outlined.NoteAdd) { onSelect(NewItemType.FILE) }
+    MenuOption(stringResource(R.string.menu_new_folder), Icons.Outlined.CreateNewFolder) { onSelect(NewItemType.FOLDER) }
+    MenuOption(stringResource(R.string.menu_new_html), Icons.Outlined.Code) { onSelect(NewItemType.HTML) }
+    MenuOption(stringResource(R.string.menu_new_css), Icons.Outlined.Brush) { onSelect(NewItemType.CSS) }
+    MenuOption(stringResource(R.string.menu_new_js), Icons.Outlined.Code) { onSelect(NewItemType.JS) }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1029,58 +1036,58 @@ fun FileTreeItem(
             ) {
                 if (file.isDirectory) {
                     DropdownMenuItem(
-                        text = { Text("新建文件") },
+                        text = { Text(stringResource(R.string.menu_new_file)) },
                         leadingIcon = { MenuIcon(Icons.Outlined.NoteAdd) },
                         onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.FILE) }
                     )
                     DropdownMenuItem(
-                        text = { Text("新建文件夹") },
+                        text = { Text(stringResource(R.string.menu_new_folder)) },
                         leadingIcon = { MenuIcon(Icons.Outlined.CreateNewFolder) },
                         onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.FOLDER) }
                     )
                     DropdownMenuItem(
-                        text = { Text("新建 HTML 文件") },
+                        text = { Text(stringResource(R.string.menu_new_html)) },
                         leadingIcon = { MenuIcon(Icons.Outlined.Code) },
                         onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.HTML) }
                     )
                     DropdownMenuItem(
-                        text = { Text("新建 CSS 文件") },
+                        text = { Text(stringResource(R.string.menu_new_css)) },
                         leadingIcon = { MenuIcon(Icons.Outlined.Brush) },
                         onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.CSS) }
                     )
                     DropdownMenuItem(
-                        text = { Text("新建 JS 文件") },
-                        leadingIcon = { MenuIcon(Icons.Outlined.Terminal) },
+                        text = { Text(stringResource(R.string.menu_new_js)) },
+                        leadingIcon = { MenuIcon(Icons.Outlined.Code) },
                         onClick = { onMenuToggle(null); onNewItem(file.file, NewItemType.JS) }
                     )
                     DropdownMenuItem(
-                        text = { Text("重命名") },
+                        text = { Text(stringResource(R.string.menu_rename)) },
                         leadingIcon = { MenuIcon(Icons.Outlined.DriveFileRenameOutline) },
                         onClick = { onMenuToggle(null); onRename(file) }
                     )
                     DropdownMenuItem(
-                        text = { Text("复制路径") },
+                        text = { Text(stringResource(R.string.menu_copy_path)) },
                         leadingIcon = { MenuIcon(Icons.Outlined.ContentCopy) },
                         onClick = { onMenuToggle(null); onCopyPath(file) }
                     )
                     DropdownMenuItem(
-                        text = { Text("删除") },
+                        text = { Text(stringResource(R.string.menu_delete)) },
                         leadingIcon = { MenuIcon(Icons.Outlined.Delete) },
                         onClick = { onMenuToggle(null); onDelete(file) }
                     )
                 } else {
                     DropdownMenuItem(
-                        text = { Text("重命名") },
+                        text = { Text(stringResource(R.string.menu_rename)) },
                         leadingIcon = { MenuIcon(Icons.Outlined.DriveFileRenameOutline) },
                         onClick = { onMenuToggle(null); onRename(file) }
                     )
                     DropdownMenuItem(
-                        text = { Text("复制路径") },
+                        text = { Text(stringResource(R.string.menu_copy_path)) },
                         leadingIcon = { MenuIcon(Icons.Outlined.ContentCopy) },
                         onClick = { onMenuToggle(null); onCopyPath(file) }
                     )
                     DropdownMenuItem(
-                        text = { Text("删除") },
+                        text = { Text(stringResource(R.string.menu_delete)) },
                         leadingIcon = { MenuIcon(Icons.Outlined.Delete) },
                         onClick = { onMenuToggle(null); onDelete(file) }
                     )
@@ -1120,7 +1127,6 @@ fun FileTreeItem(
     }
 }
 
-/** 菜单项的统一图标样式（20dp） */
 @Composable
 private fun MenuIcon(icon: ImageVector) {
     Icon(
@@ -1197,7 +1203,7 @@ fun SymbolToolbar(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Undo,
-                    contentDescription = "撤销",
+                    contentDescription = stringResource(R.string.cd_undo),
                     tint = if (canUndo) enabledColor else disabledColor,
                     modifier = Modifier.width(20.dp).height(20.dp)
                 )
@@ -1213,7 +1219,7 @@ fun SymbolToolbar(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Redo,
-                    contentDescription = "重做",
+                    contentDescription = stringResource(R.string.cd_redo),
                     tint = if (canRedo) enabledColor else disabledColor,
                     modifier = Modifier.width(20.dp).height(20.dp)
                 )
@@ -1297,10 +1303,6 @@ fun TextMenuButton(text: String, onClick: () -> Unit) {
     )
 }
 
-/**
- * 代码编辑区
- * - 背景、文字、行号、光标行、引导线都根据 darkTheme 动态切换
- */
 @Composable
 fun CodeEditorWithLineNumbers(
     value: TextFieldValue,
@@ -1330,7 +1332,6 @@ fun CodeEditorWithLineNumbers(
         }
     }
 
-    // ── 主题色 ──
     val editorBg     = if (darkTheme) Color(0xFF1E1E1E) else Color(0xFFFFFFFF)
     val defaultText  = if (darkTheme) Color(0xFFD4D4D4) else Color(0xFF333333)
     val lineNumColor = if (darkTheme) Color(0xFF858585) else Color(0xFF9E9E9E)
@@ -1349,7 +1350,6 @@ fun CodeEditorWithLineNumbers(
             }
     ) {
         Row(modifier = Modifier.fillMaxSize()) {
-            // 行号列
             Column(
                 modifier = Modifier
                     .width(48.dp)
@@ -1370,7 +1370,6 @@ fun CodeEditorWithLineNumbers(
                 }
             }
 
-            // 代码区
             BoxWithConstraints(
                 modifier = Modifier
                     .weight(1f)
@@ -1379,7 +1378,6 @@ fun CodeEditorWithLineNumbers(
                 val viewportWidthPx = constraints.maxWidth.toFloat()
                 val viewportHeightPx = constraints.maxHeight.toFloat()
 
-                // ── 光标自动滚动 ──
                 LaunchedEffect(value.selection.start, textLayout) {
                     val layout = textLayout ?: return@LaunchedEffect
                     if (viewportWidthPx <= 0f || viewportHeightPx <= 0f) return@LaunchedEffect

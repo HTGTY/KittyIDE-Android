@@ -25,16 +25,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kitty.ide.R
 import com.kitty.ide.data.terminal.LogLevel
 import com.kitty.ide.data.terminal.TerminalManager
 
 /**
  * 终端面板：日志列表 + 清空 + 关闭
- * 由外部决定放在哪个位置（右侧 / 底部）
  */
 @Composable
 fun TerminalPanel(
@@ -54,7 +55,7 @@ fun TerminalPanel(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "终端",
+                text = stringResource(R.string.terminal_title),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Medium,
                 color = Color(0xFFD4D4D4),
@@ -66,7 +67,7 @@ fun TerminalPanel(
             ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "清空",
+                    contentDescription = stringResource(R.string.terminal_clear),
                     tint = Color(0xFF858585),
                     modifier = Modifier.size(16.dp)
                 )
@@ -77,7 +78,7 @@ fun TerminalPanel(
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "关闭",
+                    contentDescription = stringResource(R.string.terminal_close),
                     tint = Color(0xFF858585),
                     modifier = Modifier.size(16.dp)
                 )
@@ -91,7 +92,7 @@ fun TerminalPanel(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "暂无输出",
+                    text = stringResource(R.string.terminal_empty),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFF6F6F6F)
                 )

@@ -33,12 +33,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kitty.ide.AppInfo
+import com.kitty.ide.R
 import com.kitty.ide.ui.theme.FontManager
 import com.kitty.ide.ui.theme.ThemeManager
+
+/** 把主题模式的 key 映射成本地化文本 */
+@Composable
+private fun themeLabelOf(mode: String): String = when (mode) {
+    "Light" -> stringResource(R.string.theme_light)
+    "Dark" -> stringResource(R.string.theme_dark)
+    else -> stringResource(R.string.theme_auto)
+}
 
 @Composable
 fun SettingsScreen(
@@ -71,12 +81,12 @@ fun SettingsScreen(
             IconButton(onClick = onBack) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回",
+                    contentDescription = stringResource(R.string.cd_toggle_tree),
                     tint = MaterialTheme.colorScheme.onSurface
                 )
             }
             Text(
-                text = "设置",
+                text = stringResource(R.string.settings_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
@@ -93,22 +103,22 @@ fun SettingsScreen(
         ) {
             // 卡片 1：关于
             SettingsCard(
-                title = "关于",
-                subtitle = "版本信息、作者、开源地址",
+                title = stringResource(R.string.settings_about),
+                subtitle = stringResource(R.string.settings_about_subtitle),
                 onClick = { showAboutDialog = true }
             )
 
             // 卡片 2：显示设置
             SettingsCard(
-                title = "显示设置",
-                subtitle = "模式切换 · 当前：${ThemeManager.labelOf(mode)}",
+                title = stringResource(R.string.settings_display),
+                subtitle = stringResource(R.string.settings_display_subtitle, themeLabelOf(mode)),
                 onClick = { showThemeDialog = true }
             )
 
             // 卡片 3：编辑器字体
             SettingsCard(
-                title = "编辑器字体",
-                subtitle = "当前：${FontManager.labelOf(fontKey)}",
+                title = stringResource(R.string.settings_font),
+                subtitle = stringResource(R.string.settings_font_subtitle, FontManager.labelOf(fontKey)),
                 onClick = { showFontDialog = true }
             )
 
@@ -127,7 +137,7 @@ fun SettingsScreen(
     if (showAboutDialog) {
         AlertDialog(
             onDismissRequest = { showAboutDialog = false },
-            title = { Text("关于 ${AppInfo.NAME}") },
+            title = { Text(stringResource(R.string.about_title, AppInfo.NAME)) },
             text = {
                 Column {
                     Text(
@@ -137,20 +147,23 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(Modifier.height(8.dp))
-                    AboutLine("版本", AppInfo.VERSION)
-                    AboutLine("环境", AppInfo.ENVIRONMENT)
-                    AboutLine("作者", AppInfo.AUTHOR)
-                    AboutLine("开源地址", AppInfo.OPEN_SOURCE_URL)
-                    AboutLine("感谢人员", AppInfo.THANKS)
+                    AboutLine(stringResource(R.string.about_version), AppInfo.VERSION)
+                    AboutLine(stringResource(R.string.about_environment), AppInfo.ENVIRONMENT)
+                    AboutLine(stringResource(R.string.about_author), AppInfo.AUTHOR)
+                    AboutLine(stringResource(R.string.about_source), AppInfo.OPEN_SOURCE_URL)
+                    AboutLine(
+                        stringResource(R.string.about_thanks),
+                        stringResource(R.string.about_thanks_placeholder)
+                    )
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        text = AppInfo.SLOGAN,
+                        text = stringResource(R.string.app_slogan),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = AppInfo.COPYRIGHT,
+                        text = stringResource(R.string.about_copyright),
                         style = MaterialTheme.typography.labelSmall,
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -158,7 +171,9 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showAboutDialog = false }) { Text("知道了") }
+                TextButton(onClick = { showAboutDialog = false }) {
+                    Text(stringResource(R.string.about_ok))
+                }
             }
         )
     }
@@ -167,7 +182,7 @@ fun SettingsScreen(
     if (showThemeDialog) {
         AlertDialog(
             onDismissRequest = { showThemeDialog = false },
-            title = { Text("模式切换") },
+            title = { Text(stringResource(R.string.theme_title)) },
             text = {
                 Column {
                     listOf("Light", "Dark", "Auto").forEach { option ->
@@ -185,7 +200,7 @@ fun SettingsScreen(
                                 onClick = { ThemeManager.setMode(context, option) }
                             )
                             Text(
-                                text = ThemeManager.labelOf(option),
+                                text = themeLabelOf(option),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -194,7 +209,9 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showThemeDialog = false }) { Text("完成") }
+                TextButton(onClick = { showThemeDialog = false }) {
+                    Text(stringResource(R.string.theme_done))
+                }
             }
         )
     }
@@ -203,7 +220,7 @@ fun SettingsScreen(
     if (showFontDialog) {
         AlertDialog(
             onDismissRequest = { showFontDialog = false },
-            title = { Text("编辑器字体") },
+            title = { Text(stringResource(R.string.font_title)) },
             text = {
                 Column {
                     FontManager.available.forEach { option ->
@@ -230,7 +247,9 @@ fun SettingsScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showFontDialog = false }) { Text("完成") }
+                TextButton(onClick = { showFontDialog = false }) {
+                    Text(stringResource(R.string.font_done))
+                }
             }
         )
     }
@@ -283,7 +302,7 @@ private fun SettingsCard(
 private fun AboutLine(label: String, value: String) {
     Row(modifier = Modifier.padding(vertical = 2.dp)) {
         Text(
-            text = "$label：",
+            text = "$label: ",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

@@ -36,10 +36,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.kitty.ide.R
 import com.kitty.ide.data.terminal.LogLevel
 import com.kitty.ide.data.terminal.TerminalManager
 import com.kitty.ide.ui.component.TerminalPanel
@@ -91,7 +93,7 @@ fun PreviewScreen(
             IconButton(onClick = onBack) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "返回编辑器",
+                    contentDescription = stringResource(R.string.preview_back),
                     tint = MaterialTheme.colorScheme.onSurface
                 )
             }
@@ -109,7 +111,7 @@ fun PreviewScreen(
             IconButton(onClick = { showTerminal = !showTerminal }) {
                 Icon(
                     imageVector = Icons.Default.Terminal,
-                    contentDescription = "终端",
+                    contentDescription = stringResource(R.string.preview_terminal),
                     tint = if (showTerminal) MaterialTheme.colorScheme.primary
                            else MaterialTheme.colorScheme.onSurface
                 )
@@ -118,7 +120,7 @@ fun PreviewScreen(
             IconButton(onClick = { webViewRef?.reload() }) {
                 Icon(
                     imageVector = Icons.Default.Refresh,
-                    contentDescription = "刷新",
+                    contentDescription = stringResource(R.string.preview_refresh),
                     tint = MaterialTheme.colorScheme.onSurface
                 )
             }

@@ -115,7 +115,6 @@ fun StartScreen(
     var showPermissionDialog by remember { mutableStateOf(false) }
 
     // ── 猫咪彩蛋状态 ──
-    // 预加载 4 张图，避免每次重组都解码
     val kittyBitmaps = remember {
         KITTY_FILES.map { loadAssetBitmap(context, it) }
     }
@@ -150,14 +149,8 @@ fun StartScreen(
     if (showPermissionDialog) {
         AlertDialog(
             onDismissRequest = { },
-            title = { Text("需要文件管理权限") },
-            text = {
-                Text(
-                    "为了提供更好的代码编辑体验，Kitty IDE 需要访问所有文件。\n\n" +
-                        "同意后，项目将保存在 /sdcard/Documents/Kitty/project/ 目录下。\n" +
-                        "拒绝后，项目将保存在 App 私有目录中。"
-                )
-            },
+            title = { Text(stringResource(R.string.perm_title)) },
+            text = { Text(stringResource(R.string.perm_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     showPermissionDialog = false
@@ -173,10 +166,12 @@ fun StartScreen(
                             )
                         )
                     }
-                }) { Text("去开启") }
+                }) { Text(stringResource(R.string.perm_grant)) }
             },
             dismissButton = {
-                TextButton(onClick = { showPermissionDialog = false }) { Text("拒绝") }
+                TextButton(onClick = { showPermissionDialog = false }) {
+                    Text(stringResource(R.string.perm_deny))
+                }
             }
         )
     }
@@ -187,7 +182,11 @@ fun StartScreen(
         uri?.let {
             viewModel.openProjectFromSaf(it) { resultPath ->
                 if (resultPath != null) onOpenProject(resultPath)
-                else Toast.makeText(context, "暂不支持此目录", Toast.LENGTH_SHORT).show()
+                else Toast.makeText(
+                    context,
+                    context.getString(R.string.toast_saf_unsupported),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -207,7 +206,7 @@ fun StartScreen(
         ) {
             Spacer(Modifier.height(80.dp))
 
-            // ── 猫咪头像（点击旋转彩蛋，用图片替换 emoji） ──
+            // ── 猫咪头像（点击旋转彩蛋） ──
             Box(
                 modifier = Modifier
                     .size(96.dp)
@@ -221,7 +220,6 @@ fun StartScreen(
                             if (willChangeEmoji) {
                                 launch {
                                     delay(150)
-                                    // 从 1~3 里随机选一个（0 是普通脸，不进随机池）
                                     kittyIndex = Random.nextInt(1, 4)
                                 }
                             }
@@ -250,7 +248,6 @@ fun StartScreen(
                             .graphicsLayer { rotationZ = kittyRotation.value }
                     )
                 } else {
-                    // 兜底：图片缺失时退回 emoji
                     Text(
                         text = "🐱",
                         fontSize = 48.sp,
@@ -299,7 +296,7 @@ fun StartScreen(
             Spacer(Modifier.height(48.dp))
 
             Text(
-                text = "所有项目",
+                text = stringResource(R.string.start_all_projects),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -307,7 +304,7 @@ fun StartScreen(
 
             if (sortedProjects.isEmpty()) {
                 Text(
-                    text = "暂无项目，去创建一个吧～",
+                    text = stringResource(R.string.start_no_projects),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp)
@@ -325,7 +322,6 @@ fun StartScreen(
                             .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // 📦 → Icons.Outlined.Code
                         Icon(
                             imageVector = Icons.Outlined.Code,
                             contentDescription = null,
@@ -353,7 +349,7 @@ fun StartScreen(
             Spacer(Modifier.height(48.dp))
 
             Text(
-                text = "v${AppInfo.VERSION}",
+                text = stringResource(R.string.version_format, AppInfo.VERSION),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -371,7 +367,7 @@ fun StartScreen(
         ) {
             Icon(
                 imageVector = Icons.Default.Settings,
-                contentDescription = "设置",
+                contentDescription = stringResource(R.string.start_settings),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -393,7 +389,11 @@ fun StartScreen(
                     if (path != null) {
                         onOpenProject(path)
                     } else {
-                        Toast.makeText(context, "创建失败，项目名可能重复", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.new_project_failed),
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
                 showNewProjectDialog = false
@@ -407,6 +407,7 @@ fun NewProjectDialog(
     onDismiss: () -> Unit,
     onConfirm: (name: String, version: String, desc: String, language: String, createSample: Boolean) -> Unit
 ) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var version by remember { mutableStateOf("v0.0.1") }
     var desc by remember { mutableStateOf("") }
@@ -417,7 +418,7 @@ fun NewProjectDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("新建项目") },
+        title = { Text(stringResource(R.string.new_project_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -426,7 +427,7 @@ fun NewProjectDialog(
                         name = it
                         nameError = null
                     },
-                    label = { Text("项目名 *") },
+                    label = { Text(stringResource(R.string.new_project_name)) },
                     singleLine = true,
                     isError = nameError != null,
                     modifier = Modifier.fillMaxWidth()
@@ -441,21 +442,21 @@ fun NewProjectDialog(
                 OutlinedTextField(
                     value = version,
                     onValueChange = { version = it },
-                    label = { Text("初始版本") },
+                    label = { Text(stringResource(R.string.new_project_version)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = desc,
                     onValueChange = { desc = it },
-                    label = { Text("项目描述（选填）") },
+                    label = { Text(stringResource(R.string.new_project_description)) },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Box {
                     OutlinedTextField(
                         value = language,
                         onValueChange = {},
-                        label = { Text("Program language") },
+                        label = { Text(stringResource(R.string.new_project_language)) },
                         readOnly = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -484,24 +485,24 @@ fun NewProjectDialog(
                         checked = createSample,
                         onCheckedChange = { createSample = it }
                     )
-                    Text("创建示例文件 (index.html)")
+                    Text(stringResource(R.string.new_project_create_sample))
                 }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    val error = NameValidator.validate(name)
+                    val error = NameValidator.validate(context, name)
                     if (error != null) {
                         nameError = error
                         return@TextButton
                     }
                     onConfirm(name.trim(), version.trim(), desc.trim(), language, createSample)
                 }
-            ) { Text("创建") }
+            ) { Text(stringResource(R.string.new_project_create)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.new_project_cancel)) }
         }
     )
 }

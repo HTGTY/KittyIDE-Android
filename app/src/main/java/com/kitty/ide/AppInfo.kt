@@ -2,7 +2,7 @@ package com.kitty.ide
 
 /**
  * Kitty IDE 应用元信息中心
- * 所有 UI 层需要展示的 App 信息都从这里读，避免散落各处。
+ * 只保留不随语言变化的字段；可翻译的文案走 strings.xml。
  */
 object AppInfo {
 
@@ -10,16 +10,11 @@ object AppInfo {
     val VERSION: String = BuildConfig.VERSION_NAME
     val VERSION_CODE: Int = BuildConfig.VERSION_CODE
 
-    // ── 基础信息 ──
+    // ── 基础信息（不翻译）──
     const val NAME = "Kitty IDE"
     const val ENVIRONMENT = "Android"
-    const val SLOGAN = "Kitty IDE，您的轻量化移动工作站😼"
-
-    // ── 作者与版权 ──
     const val AUTHOR = "黄桃罐头吖386（HTGTY386）"
-    const val COPYRIGHT = "Copyright (C) 黄桃罐头吖386(HTGTY386)"
 
-    // ── 开源与致谢（先留空）──
-    const val OPEN_SOURCE_URL = "（协议）这里先空着"
-    const val THANKS = "这里先空着"
+    // ── 开源地址 ──
+    const val OPEN_SOURCE_URL = "https://github.com/HTGTY/KittyIDE-Android"
 }
