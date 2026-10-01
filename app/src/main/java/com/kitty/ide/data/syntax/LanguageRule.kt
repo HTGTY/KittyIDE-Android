@@ -81,7 +81,7 @@ data class LanguageRule(
                     val endObj = json.optJSONObject("end") ?: return null
                     val startPattern = parsePatternMatch(startObj) ?: return null
                     val endPattern = parsePatternMatch(endObj) ?: return null
-
+                
                     val innerRules = mutableListOf<SyntaxRule>()
                     val innerArray = json.optJSONArray("innerRules")
                     if (innerArray != null) {
@@ -90,7 +90,12 @@ data class LanguageRule(
                             parseRule(rj)?.let { innerRules.add(it) }
                         }
                     }
-                    RegionRule(startPattern, endPattern, innerRules)
+                
+                    // 👈 新增：childrenSyntax
+                    val childrenSyntax = json.optString("childrenSyntax", "")
+                        .ifEmpty { null }
+                
+                    RegionRule(startPattern, endPattern, innerRules, childrenSyntax)
                 }
                 else -> null
             }

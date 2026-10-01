@@ -60,6 +60,12 @@ object SyntaxLoader {
                 emptyMap()
             }
         }
+
+        // 设置 resolver：让 RegionRule 能按语言名找到子语言
+        LanguageResolver.setResolver { name ->
+            result.values.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        }
+
         LanguageRegistry.setRules(result)
     }
 

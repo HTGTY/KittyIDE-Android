@@ -4,6 +4,18 @@
   "rules": [
     {
       "type": "region",
+      "start": {"pattern": "<script\\b[^>]*>", "tokens": {"0": "tagname"}},
+      "end":   {"pattern": "</script\\s*>",  "tokens": {"0": "tagname"}},
+      "childrenSyntax": "JavaScript"
+    },
+    {
+      "type": "region",
+      "start": {"pattern": "<style\\b[^>]*>", "tokens": {"0": "tagname"}},
+      "end":   {"pattern": "</style\\s*>",  "tokens": {"0": "tagname"}},
+      "childrenSyntax": "CSS"
+    },
+    {
+      "type": "region",
       "start": {"pattern": "<!--", "tokens": {"0": "comment"}},
       "end":   {"pattern": "-->",  "tokens": {"0": "comment"}},
       "innerRules": []

@@ -176,10 +176,18 @@ data class RegexRule(
 /**
  * 区域规则：从 start 模式进入，end 模式退出，中间用 innerRules 扫描。
  */
+/**
+ * 区域规则：从 start 模式进入，end 模式退出。
+ *
+ * - 若 childrenSyntaxName 为 null：内部用 innerRules 扫描
+ * - 若 childrenSyntaxName 不为 null：内部用"子语言"的完整规则扫描，
+ *   同时不断尝试 end 以识别区域出口（这是 HTML 里 <script>/<style> 的核心机制）
+ */
 data class RegionRule(
     val start: PatternMatch,
     val end: PatternMatch,
-    val innerRules: List<SyntaxRule>
+    val innerRules: List<SyntaxRule>,
+    val childrenSyntaxName: String? = null
 ) : SyntaxRule() {
     override fun tryMatch(text: String, pos: Int, limit: Int): RuleMatch? {
         val startMatch = start.tryMatch(text, pos, limit) ?: return null
@@ -187,8 +195,38 @@ data class RegionRule(
         allTokens.addAll(startMatch.tokens)
         var p = startMatch.endPos
 
+        // 解析子语言（如果声明了）
+        val childRules: List<SyntaxRule>? = childrenSyntaxName?.let { name ->
+            LanguageResolver.resolve(name)?.rules
+        }
+
         while (p < limit) {
-            // ① 先尝试 innerRules
+            // ① 如果声明了子语言，优先用子语言规则扫描
+            if (childRules != null) {
+                // 但先尝试 end，防止 JS 里的字符串恰好匹配 </script> 而无限吞掉
+                val endFirst = end.tryMatch(text, p, limit)
+                if (endFirst != null) {
+                    allTokens.addAll(endFirst.tokens)
+                    return RuleMatch(allTokens, endFirst.endPos)
+                }
+                // 用子语言规则
+                var childMatched = false
+                for (rule in childRules) {
+                    val r = rule.tryMatch(text, p, limit)
+                    if (r != null && r.endPos > p) {
+                        allTokens.addAll(r.tokens)
+                        p = r.endPos
+                        childMatched = true
+                        break
+                    }
+                }
+                if (childMatched) continue
+                // 子规则都不匹配，前进一个字符
+                p++
+                continue
+            }
+
+            // ② 没声明子语言：用 innerRules
             var innerMatched = false
             for (rule in innerRules) {
                 val r = rule.tryMatch(text, p, limit)
@@ -201,14 +239,14 @@ data class RegionRule(
             }
             if (innerMatched) continue
 
-            // ② 尝试 end
+            // ③ 尝试 end
             val endMatch = end.tryMatch(text, p, limit)
             if (endMatch != null) {
                 allTokens.addAll(endMatch.tokens)
                 return RuleMatch(allTokens, endMatch.endPos)
             }
 
-            // ③ 都不匹配，前进一个字符
+            // ④ 都不匹配，前进一个字符
             p++
         }
 

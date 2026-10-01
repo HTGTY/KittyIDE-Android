@@ -24,4 +24,12 @@ object LanguageRegistry {
         if (ext.isEmpty()) return null
         return _rules.value.values.firstOrNull { ext in it.extensions }
     }
+
+    /**
+     * 根据语言名找规则。用于 childrenSyntax 引用（比如 HTML 里引用 "JavaScript"）。
+     */
+    fun forName(name: String): LanguageRule? {
+        if (name.isEmpty()) return null
+        return _rules.value.values.firstOrNull { it.name.equals(name, ignoreCase = true) }
+    }
 }
