@@ -120,34 +120,55 @@
 
     <!-- Settings Screen -->
     <string name="settings_title">设置</string>
-    <string name="settings_about">关于</string>
-    <string name="settings_about_subtitle">版本信息、作者、开源地址</string>
-    <string name="settings_display">显示设置</string>
-    <string name="settings_display_subtitle">模式切换 · 当前：%1$s</string>
-    <string name="settings_font">编辑器字体</string>
-    <string name="settings_font_subtitle">当前：%1$s</string>
+    <string name="settings_view">视图</string>
+    <string name="settings_view_subtitle">主题颜色、编辑器字体</string>
+    <string name="settings_about_full">关于</string>
+    <string name="settings_about_full_subtitle">版本、作者、更新</string>
 
-    <!-- About Dialog -->
-    <string name="about_title">关于 %1$s</string>
+    <!-- View Settings Screen -->
+    <string name="view_title">视图</string>
+    <string name="view_section_theme">主题颜色</string>
+    <string name="view_section_font">编辑器字体</string>
+    <string name="view_reload_font">重新加载字体</string>
+    <string name="view_font_reloaded">字体已重新加载</string>
+    <string name="view_font_reload_hint">从 assets 重新加载字体文件</string>
+
+    <!-- About Screen -->
+    <string name="about_title_full">关于</string>
+    <string name="about_basic_info">基本信息</string>
     <string name="about_version">版本</string>
     <string name="about_environment">环境</string>
     <string name="about_author">作者</string>
     <string name="about_source">开源地址</string>
-    <string name="about_thanks">感谢人员</string>
-    <string name="about_thanks_placeholder">这里先空着</string>
+    <string name="about_contact">联系方式</string>
+    <string name="about_contact_qq">QQ邮箱：3975320058@qq.com</string>
+    <string name="about_thanks_section">感谢名单</string>
+    <string name="about_thanks_empty">暂无</string>
     <string name="about_copyright">Copyright (C) 黄桃罐头吖386(HTGTY386)</string>
-    <string name="about_ok">知道了</string>
+    <string name="about_open_link_failed">无法打开链接</string>
 
-    <!-- Theme Dialog -->
-    <string name="theme_title">模式切换</string>
+    <!-- Theme -->
     <string name="theme_light">浅色</string>
     <string name="theme_dark">深色</string>
     <string name="theme_auto">跟随系统</string>
-    <string name="theme_done">完成</string>
 
-    <!-- Font Dialog -->
-    <string name="font_title">编辑器字体</string>
-    <string name="font_done">完成</string>
+    <!-- Update -->
+    <string name="update_check_title">检查更新</string>
+    <string name="update_check_subtitle">从 GitHub Releases 检查</string>
+    <string name="update_checking">正在检查更新…</string>
+    <string name="update_available_title">发现新版本</string>
+    <string name="update_new_version">新版本：%1$s</string>
+    <string name="update_current_version">当前版本：%1$s</string>
+    <string name="update_release_notes">更新内容</string>
+    <string name="update_btn_update">更新</string>
+    <string name="update_btn_ignore">忽略本次更新</string>
+    <string name="update_btn_cancel">取消</string>
+    <string name="update_no_update">已是最新版本</string>
+    <string name="update_check_failed">检查更新失败</string>
+    <string name="update_no_release">暂无 Release 信息</string>
+    <string name="update_downloading">正在下载… %1$d%%</string>
+    <string name="update_download_failed">下载失败</string>
+    <string name="update_download_complete">下载完成，正在启动安装…</string>
 
     <!-- Content Descriptions -->
     <string name="cd_toggle_tree">切换文件树</string>

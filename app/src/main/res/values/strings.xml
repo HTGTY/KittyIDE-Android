@@ -120,34 +120,55 @@
 
     <!-- Settings Screen -->
     <string name="settings_title">Settings</string>
-    <string name="settings_about">About</string>
-    <string name="settings_about_subtitle">Version, author, source code</string>
-    <string name="settings_display">Display</string>
-    <string name="settings_display_subtitle">Theme mode · Current: %1$s</string>
-    <string name="settings_font">Editor Font</string>
-    <string name="settings_font_subtitle">Current: %1$s</string>
+    <string name="settings_view">View</string>
+    <string name="settings_view_subtitle">Theme color, editor font</string>
+    <string name="settings_about_full">About</string>
+    <string name="settings_about_full_subtitle">Version, author, update</string>
 
-    <!-- About Dialog -->
-    <string name="about_title">About %1$s</string>
+    <!-- View Settings Screen -->
+    <string name="view_title">View</string>
+    <string name="view_section_theme">Theme Color</string>
+    <string name="view_section_font">Editor Font</string>
+    <string name="view_reload_font">Reload Font</string>
+    <string name="view_font_reloaded">Font reloaded</string>
+    <string name="view_font_reload_hint">Reload font files from assets</string>
+
+    <!-- About Screen -->
+    <string name="about_title_full">About</string>
+    <string name="about_basic_info">Basic Info</string>
     <string name="about_version">Version</string>
     <string name="about_environment">Environment</string>
     <string name="about_author">Author</string>
     <string name="about_source">Source</string>
-    <string name="about_thanks">Thanks</string>
-    <string name="about_thanks_placeholder">To be filled</string>
+    <string name="about_contact">Contact</string>
+    <string name="about_contact_qq">QQ Mail: 3975320058@qq.com</string>
+    <string name="about_thanks_section">Thanks</string>
+    <string name="about_thanks_empty">No one yet.</string>
     <string name="about_copyright">Copyright (C) HTGTY386</string>
-    <string name="about_ok">Got it</string>
+    <string name="about_open_link_failed">Unable to open link</string>
 
-    <!-- Theme Dialog -->
-    <string name="theme_title">Theme Mode</string>
+    <!-- Theme -->
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="theme_auto">Follow System</string>
-    <string name="theme_done">Done</string>
 
-    <!-- Font Dialog -->
-    <string name="font_title">Editor Font</string>
-    <string name="font_done">Done</string>
+    <!-- Update -->
+    <string name="update_check_title">Check for Updates</string>
+    <string name="update_check_subtitle">Check GitHub Releases</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_available_title">Update Available</string>
+    <string name="update_new_version">New version: %1$s</string>
+    <string name="update_current_version">Current version: %1$s</string>
+    <string name="update_release_notes">Release Notes</string>
+    <string name="update_btn_update">Update</string>
+    <string name="update_btn_ignore">Ignore this version</string>
+    <string name="update_btn_cancel">Cancel</string>
+    <string name="update_no_update">You are on the latest version</string>
+    <string name="update_check_failed">Failed to check for updates</string>
+    <string name="update_no_release">No release info available</string>
+    <string name="update_downloading">Downloading… %1$d%%</string>
+    <string name="update_download_failed">Download failed</string>
+    <string name="update_download_complete">Download complete, launching installer…</string>
 
     <!-- Content Descriptions -->
     <string name="cd_toggle_tree">Toggle file tree</string>

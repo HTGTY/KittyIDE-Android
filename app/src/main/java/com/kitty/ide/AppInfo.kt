@@ -14,7 +14,12 @@ object AppInfo {
     const val NAME = "Kitty IDE"
     const val ENVIRONMENT = "Android"
     const val AUTHOR = "黄桃罐头吖386（HTGTY386）"
+    const val AUTHOR_EMAIL = "3975320058@qq.com"
 
     // ── 开源地址 ──
     const val OPEN_SOURCE_URL = "https://github.com/HTGTY/KittyIDE-Android"
+
+    // ── GitHub API（用于检查更新）──
+    const val GITHUB_API_LATEST_RELEASE =
+        "https://api.github.com/repos/HTGTY/KittyIDE-Android/releases/latest"
 }

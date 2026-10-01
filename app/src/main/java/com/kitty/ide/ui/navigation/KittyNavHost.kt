@@ -6,16 +6,20 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.kitty.ide.ui.screen.AboutScreen
 import com.kitty.ide.ui.screen.EditorScreen
 import com.kitty.ide.ui.screen.PreviewScreen
 import com.kitty.ide.ui.screen.SettingsScreen
 import com.kitty.ide.ui.screen.StartScreen
+import com.kitty.ide.ui.screen.ViewSettingsScreen
 
 object KittyRoute {
     const val START = "start"
     const val EDITOR = "editor/{projectPath}"
     const val PREVIEW = "preview/{htmlPath}"
     const val SETTINGS = "settings"
+    const val VIEW_SETTINGS = "view_settings"
+    const val ABOUT = "about"
 
     fun editor(projectPath: String): String {
         return "editor/${Uri.encode(projectPath)}"
@@ -71,6 +75,24 @@ fun KittyNavHost(
 
         composable(KittyRoute.SETTINGS) {
             SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenViewSettings = {
+                    navController.navigate(KittyRoute.VIEW_SETTINGS)
+                },
+                onOpenAbout = {
+                    navController.navigate(KittyRoute.ABOUT)
+                }
+            )
+        }
+
+        composable(KittyRoute.VIEW_SETTINGS) {
+            ViewSettingsScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(KittyRoute.ABOUT) {
+            AboutScreen(
                 onBack = { navController.popBackStack() }
             )
         }

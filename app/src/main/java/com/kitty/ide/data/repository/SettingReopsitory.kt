@@ -18,4 +18,12 @@ class SettingsRepository(context: Context) {
     fun setCodeFont(key: String) {
         prefs.edit().putString("code_font", key).apply()
     }
+
+    /** 已忽略的更新版本（例如 "v0.1.5"），空串表示未忽略过任何版本 */
+    fun getIgnoredUpdateVersion(): String =
+        prefs.getString("ignored_update_version", "") ?: ""
+
+    fun setIgnoredUpdateVersion(version: String) {
+        prefs.edit().putString("ignored_update_version", version).apply()
+    }
 }
