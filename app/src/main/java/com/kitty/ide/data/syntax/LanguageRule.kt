@@ -1,28 +1,16 @@
 package com.kitty.ide.data.syntax
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * 一门语言的词法规则。加新语言就是加一份 JSON 配置。
- *
- * 简化版能表达的字段：
- *  - name: 语言名
- *  - extensions: 匹配的文件扩展名（小写）
- *  - keywords: 关键字表
- *  - lineCommentPrefix: 行注释前缀
- *  - blockCommentStart / blockCommentEnd: 块注释定界符
- *  - stringDelimiters: 字符串定界符
- *
- * 将来要加新能力（正则、嵌套等），只需在这里加字段，不改 Lexer 结构。
+ * 一门语言的词法规则。
+ * 所有能力统一由 [rules] 数组表达，顺序即优先级。
  */
 data class LanguageRule(
     val name: String,
     val extensions: Set<String>,
-    val keywords: Set<String>,
-    val lineCommentPrefix: String?,
-    val blockCommentStart: String?,
-    val blockCommentEnd: String?,
-    val stringDelimiters: List<String>
+    val rules: List<SyntaxRule>
 ) {
     companion object {
         fun fromJson(json: JSONObject): LanguageRule? {
@@ -34,30 +22,72 @@ data class LanguageRule(
                     (0 until arr.length()).map { arr.getString(it).lowercase() }.toSet()
                 } ?: emptySet()
 
-                val keywords = json.optJSONArray("keywords")?.let { arr ->
-                    (0 until arr.length()).map { arr.getString(it) }.toSet()
-                } ?: emptySet()
+                val rulesArray = json.optJSONArray("rules") ?: JSONArray()
+                val rules = mutableListOf<SyntaxRule>()
+                for (i in 0 until rulesArray.length()) {
+                    val ruleJson = rulesArray.optJSONObject(i) ?: continue
+                    parseRule(ruleJson)?.let { rules.add(it) }
+                }
 
-                val lineComment = json.optString("lineCommentPrefix", "").ifEmpty { null }
-                val blockStart = json.optString("blockCommentStart", "").ifEmpty { null }
-                val blockEnd = json.optString("blockCommentEnd", "").ifEmpty { null }
-
-                val stringDelims = json.optJSONArray("stringDelimiters")?.let { arr ->
-                    (0 until arr.length()).map { arr.getString(it) }
-                } ?: emptyList()
-
-                LanguageRule(
-                    name = name,
-                    extensions = extensions,
-                    keywords = keywords,
-                    lineCommentPrefix = lineComment,
-                    blockCommentStart = blockStart,
-                    blockCommentEnd = blockEnd,
-                    stringDelimiters = stringDelims
-                )
+                LanguageRule(name, extensions, rules)
             } catch (e: Exception) {
                 e.printStackTrace()
                 null
+            }
+        }
+
+        private fun parseRule(json: JSONObject): SyntaxRule? {
+            val type = json.optString("type", "")
+            val token = parseToken(json.optString("token", "default"))
+
+            return when (type) {
+                "lineComment" -> {
+                    val prefix = json.optString("prefix", "")
+                    if (prefix.isEmpty()) null
+                    else SyntaxRule.LineComment(token, prefix)
+                }
+                "blockComment" -> {
+                    val start = json.optString("start", "")
+                    val end = json.optString("end", "")
+                    if (start.isEmpty() || end.isEmpty()) null
+                    else SyntaxRule.BlockComment(token, start, end)
+                }
+                "string" -> {
+                    val arr = json.optJSONArray("delimiters") ?: return null
+                    val delims = (0 until arr.length()).map { arr.getString(it) }
+                    if (delims.isEmpty()) null
+                    else SyntaxRule.StringRule(token, delims)
+                }
+                "number" -> SyntaxRule.NumberRule(token)
+                "keyword" -> {
+                    val arr = json.optJSONArray("words") ?: return null
+                    val words = (0 until arr.length()).map { arr.getString(it) }.toSet()
+                    SyntaxRule.KeywordRule(token, words)
+                }
+                "regex" -> {
+                    val pattern = json.optString("pattern", "")
+                    if (pattern.isEmpty()) null
+                    else try {
+                        SyntaxRule.RegexRule(token, Regex(pattern))
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        null
+                    }
+                }
+                else -> null
+            }
+        }
+
+        private fun parseToken(s: String): TokenType {
+            return when (s.lowercase()) {
+                "keyword" -> TokenType.KEYWORD
+                "string" -> TokenType.STRING
+                "comment" -> TokenType.COMMENT
+                "number" -> TokenType.NUMBER
+                "operator" -> TokenType.OPERATOR
+                "identifier" -> TokenType.IDENTIFIER
+                "punctuation" -> TokenType.PUNCTUATION
+                else -> TokenType.DEFAULT
             }
         }
     }
