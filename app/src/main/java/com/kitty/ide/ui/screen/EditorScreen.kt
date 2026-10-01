@@ -306,7 +306,11 @@ fun EditorScreen(
     val activeFileName: String? = if (activeIndex in openFiles.indices) {
         openFiles[activeIndex].file.name
     } else null
-    val activeLanguage = activeFileName?.let { LanguageRegistry.forFileName(it) }
+    // 订阅语法加载状态：加载完成后自动刷新
+    val rules by LanguageRegistry.rules.collectAsState()
+    val activeLanguage = remember(activeFileName, rules) {
+        activeFileName?.let { LanguageRegistry.forFileName(it) }
+    }
     val highlightTransformation = remember(activeLanguage, darkTheme) {
         SyntaxHighlightTransformation(activeLanguage, darkTheme)
     }
@@ -682,7 +686,7 @@ fun EditorScreen(
                     focusRequestKey = activeIndex,
                     codeFont = codeFont,
                     visualTransformation = highlightTransformation,
-                    darkTheme = darkTheme,       // 👈 新增
+                    darkTheme = darkTheme,
                     modifier = Modifier.weight(1f).fillMaxHeight()
                 )
             } else {

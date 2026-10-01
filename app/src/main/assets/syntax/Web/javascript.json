@@ -1,0 +1,20 @@
+{
+  "name": "JavaScript",
+  "extensions": ["js", "jsx", "mjs", "cjs", "ts", "tsx"],
+  "keywords": [
+    "var", "let", "const", "function", "class", "extends", "static",
+    "if", "else", "for", "while", "do", "switch", "case", "default",
+    "break", "continue", "return", "try", "catch", "finally", "throw",
+    "new", "delete", "typeof", "instanceof", "in", "of", "void", "yield",
+    "import", "export", "from", "as",
+    "this", "super",
+    "async", "await", "Promise",
+    "get", "set", "public", "private", "protected", "readonly",
+    "true", "false", "null", "undefined", "NaN", "Infinity",
+    "debugger", "with"
+  ],
+  "lineCommentPrefix": "//",
+  "blockCommentStart": "/*",
+  "blockCommentEnd": "*/",
+  "stringDelimiters": ["\"", "'", "`"]
+}

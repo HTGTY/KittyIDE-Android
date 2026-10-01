@@ -1,47 +1,27 @@
 package com.kitty.ide.data.syntax
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+
 /**
- * 语言注册表。加新语言就在这里加一份 LanguageRule。
+ * 语言注册表。规则由 SyntaxLoader 异步加载，通过 StateFlow 通知 UI。
+ * key 是 json 文件的绝对路径或唯一标识，value 是规则。
  */
 object LanguageRegistry {
 
-    val JAVASCRIPT = LanguageRule(
-        name = "JavaScript",
-        extensions = setOf("js", "jsx", "mjs", "cjs", "ts", "tsx"),
-        keywords = setOf(
-            // 声明
-            "var", "let", "const", "function", "class", "extends", "static",
-            // 控制
-            "if", "else", "for", "while", "do", "switch", "case", "default",
-            "break", "continue", "return", "try", "catch", "finally", "throw",
-            // 操作
-            "new", "delete", "typeof", "instanceof", "in", "of", "void", "yield",
-            // 模块
-            "import", "export", "from", "as",
-            // 上下文
-            "this", "super",
-            // 异步
-            "async", "await", "Promise",
-            // 修饰符
-            "get", "set", "public", "private", "protected", "readonly",
-            // 字面量
-            "true", "false", "null", "undefined", "NaN", "Infinity",
-            // 调试
-            "debugger", "with"
-        ),
-        lineCommentPrefix = "//",
-        blockCommentStart = "/*",
-        blockCommentEnd = "*/",
-        stringDelimiters = listOf("\"", "'", "`")
-    )
+    private val _rules = MutableStateFlow<Map<String, LanguageRule>>(emptyMap())
+    val rules: StateFlow<Map<String, LanguageRule>> = _rules
 
-    // TODO: CSS / HTML 以后加
-    val all: List<LanguageRule> = listOf(JAVASCRIPT)
+    fun setRules(newRules: Map<String, LanguageRule>) {
+        _rules.value = newRules
+    }
 
-    /** 根据文件名找规则 */
+    /**
+     * 根据文件名找规则。返回 null 表示没有匹配的语言。
+     */
     fun forFileName(fileName: String): LanguageRule? {
         val ext = fileName.substringAfterLast('.', "").lowercase()
         if (ext.isEmpty()) return null
-        return all.firstOrNull { ext in it.extensions }
+        return _rules.value.values.firstOrNull { ext in it.extensions }
     }
 }
